@@ -1258,3 +1258,65 @@ em {
 .form-grid .model-info {
   margin: 0;
 }
+.image-price {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+.image-price strong {
+  color: var(--accent);
+  font-size: 15px;
+}
+.image-price small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.image-form .row {
+  flex-wrap: wrap;
+}
+.image-form .row small {
+  max-width: 440px;
+  font-size: 11px;
+}
+.image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 20px;
+}
+.image-result {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.image-result img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--bg);
+  display: block;
+}
+.image-placeholder {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  padding: 25px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.image-result-info {
+  padding: 16px;
+  font-size: 12px;
+}
+.image-result-info p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 110px;
+  overflow: auto;
+}
+.image-result-info .row {
+  justify-content: space-between;
+  margin-top: 12px;
+}

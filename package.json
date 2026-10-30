@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:db": "supabase test db",
     "test:e2e": "vitest run tests/app.test.tsx tests/edge.test.ts",
-    "check:edge": "deno check --node-modules-dir=manual supabase/functions/chat-stream/index.ts",
+    "check:edge": "deno check --node-modules-dir=manual supabase/functions/chat-stream/index.ts supabase/functions/image-generate/index.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "verify:dist": "node scripts/verify-dist.mjs",
     "check:supabase": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/check-supabase.mjs",

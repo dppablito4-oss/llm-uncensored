@@ -1,32 +1,35 @@
-﻿# Estado de validación
+# Validaci?n y despliegue
 
 Fecha: 30 de octubre de 2026, America/Lima.
 
-## Backend alojado comprobado
+## Publicaci?n
 
-- Proyecto `goegjuglstapjwcckawp` vinculado mediante CLI autenticada.
-- Ocho tablas con RLS y 41 modelos habilitados en `forma`. Las 19 tablas originales y `public.forma_connection_checks` permanecen en `public`.
-- Instalación transaccional sin reparar ni modificar el historial de migraciones de la otra aplicación. Ningún trigger nuevo de registro en `auth.users`.
-- Esquema `forma` expuesto conservando `public,graphql_public`. Frontend y Edge usan ese esquema expresamente.
-- `chat-stream` desplegado con gateway JWT, verificación adicional contra Auth y CORS específico `FORMA_ALLOWED_ORIGINS`.
-- Se confirmó la presencia de `LLM_UNC_API_KEY` sin leer ni guardar su valor en el repo.
-- Dos cuentas temporales: login, inicialización de perfil/cuotas/tres presets, catálogo de 41 modelos y aislamiento entre usuarios comprobados.
-- Generación real con `z-ai/glm-5.3-flash-uncensored`: SSE confirmado y respuesta persistida como `complete`. Consumo reportado: 44 tokens de entrada, 8 de salida y USD 0.0000152.
-- Las dos cuentas y sus datos se eliminaron al terminar.
+App: https://dppablito4-oss.github.io/llm-uncensored/ (GitHub Pages, HTTPS).
 
-## Validación local
+Se habilit? Pages con GitHub Actions y las dos variables p?blicas VITE. El primer despliegue del chat pas? en https://github.com/dppablito4-oss/llm-uncensored/actions/runs/41123836855. Las redirecciones de Pages y localhost se a?adieron a Auth conservando la Site URL y las redirecciones anteriores de la otra aplicaci?n. Las claves privadas permanecen en Supabase.
 
-ESLint, TypeScript, 52 pruebas en 6 archivos y compilación pasan. La suite cubre UI con proveedor simulado, cambio de modelo/tarifa, SSE, contexto, catálogo/precios, handler Edge, PostgreSQL PGlite, permisos, idempotencia y cuotas. El chequeo Deno de la Edge Function pasa. `verify:dist` comprueba rutas y ausencia de secretos de backend en el bundle. La prueba UI permite hasta 5 segundos tras streaming/navegación.
+## Backend probado
 
-## Interfaz
+Proyecto goegjuglstapjwcckawp: nueve tablas en forma y bucket privado forma-images. Se conservan las 19 tablas originales y public.forma_connection_checks en public. Se expuso forma sin quitar public ni graphql_public. No se alter? el historial de migraciones ajeno ni se agregaron triggers de registro a Auth.
 
-Selector en chat, presets y configuración con precios de entrada/salida en USD por millón. Panel con descripción oficial, contexto, salida máxima y capacidades. GLM 5.3 Flash Uncensored predeterminado. Catálogo fechado actualizable con `npm run sync:models`.
+chat-stream e image-generate est?n desplegadas con gateway JWT, validaci?n de sesi?n contra Auth y CORS espec?fico FORMA_ALLOWED_ORIGINS. Usan el secreto existente LLM_UNC_API_KEY sin guardarlo en el repo.
 
-## Pendiente
+Pruebas alojadas realizadas con cuentas temporales:
 
-- Publicación del frontend actualizado en Pages y revisión visual con sesión real, especialmente Android.
-- Confirmación/recuperación por correo real, conservando las URLs Auth de la otra aplicación.
-- pgTAP con Docker/Supabase local.
-- Solo se probó inferencia real con GLM inicial. Los otros 40 se verificaron en catálogo; no se facturó una llamada a cada uno.
+- Login, bootstrap idempotente, perfil, cuotas, tres presets y 41 modelos de texto.
+- RLS entre dos usuarios; las filas y los archivos del otro usuario no son accesibles.
+- GLM 5.3 Flash Uncensored: streaming, persistencia complete, 44 tokens de entrada, 8 de salida, USD 0.0000152 reportados.
+- Animagine XL 4.0 y Moxie Diffusion XL: una imagen de paisaje de 512?512 por modelo, USD 0.0034 cada una; persistencia y acceso firmado comprobados.
+- Los archivos y cuentas temporales se eliminaron al terminar.
 
-El backend está operativo y probado. El frontend actualizado está en el workspace y compila; estos cambios aún no se han publicado.
+## Validaci?n local
+
+62 pruebas en 8 archivos pasan. Cubren selecci?n/cambio de modelos, tarifas, formularios de imagen, SSE, contexto, handler Edge, validaci?n de par?metros, errores privados, RLS, reservas, cuotas y PostgreSQL PGlite. ESLint, TypeScript, compilaci?n, Deno para las dos funciones y verify:dist pasan.
+
+## Alcance y comprobaciones pendientes
+
+El selector de texto tiene 41 modelos con precios y par?metros publicados. Solo GLM inicial tuvo inferencia real; los otros 40 se verificaron en cat?logo.
+
+Im?genes admite los dos modelos solicitados, una imagen por env?o, nueve tama?os, pasos/CFG/semilla, galer?a de 50 solicitudes recientes y descarga privada. Las cuotas se aplican en servidor. No incluye todav?a edici?n de imagen de referencia.
+
+Quedan pendientes correo real de confirmaci?n/recuperaci?n, prueba en Android y pgTAP con Docker. Las pruebas locales y las llamadas alojadas no sustituyen esas verificaciones.

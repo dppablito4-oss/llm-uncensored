@@ -23,6 +23,7 @@ import {
   Trash2,
   Pencil,
   ArrowUpRight,
+  Image as ImageIcon,
 } from "lucide-react";
 import { supabase, configured } from "../lib/supabase";
 import { Auth } from "../features/auth/Auth";
@@ -30,6 +31,7 @@ import { Chat } from "../features/chat/Chat";
 import { Presets } from "../features/presets/Presets";
 import { Memory } from "../features/memory/Memory";
 import { Settings } from "../features/settings/Settings";
+import { Images } from "../features/images/Images";
 import { useUI } from "../stores/ui";
 import { useData } from "../hooks/useData";
 import { change, remove } from "../services/data";
@@ -88,6 +90,10 @@ function Workspace({ session }: { session: Session }) {
           <NavLink to="/memory">
             <Brain size={17} />
             Memoria
+          </NavLink>
+          <NavLink to="/images">
+            <ImageIcon size={17} />
+            Imágenes
           </NavLink>
         </nav>
         <div className="history-title">
@@ -227,6 +233,7 @@ function Workspace({ session }: { session: Session }) {
           <Route path="/presets" element={<Presets />} />
           <Route path="/memory" element={<Memory />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/images" element={<Images />} />
           <Route path="*" element={<Navigate to="/chat" replace />} />
         </Routes>
       </main>

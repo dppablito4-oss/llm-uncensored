@@ -27,6 +27,12 @@ beforeAll(async () => {
   await db.exec(
     readFileSync("supabase/migrations/202610300002_nanogpt_models.sql", "utf8"),
   );
+  await db.exec(
+    "create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;grant usage on schema storage to authenticated;grant select on storage.objects to authenticated;",
+  );
+  await db.exec(
+    readFileSync("supabase/migrations/202610300003_images.sql", "utf8"),
+  );
   await db.exec("set search_path=forma,public");
   await db.query("insert into auth.users values($1,$2),($3,$4)", [
     a,
@@ -125,6 +131,68 @@ describe.sequential("Migración PostgreSQL real y aislamiento RLS", () => {
     expect((await asUser(a, "select * from profiles")).rows).toHaveLength(1);
     expect((await asUser(a, "select * from presets")).rows).toHaveLength(3);
     expect((await asUser(b, "select * from user_limits")).rows).toHaveLength(1);
+  });
+  it("reserva imágenes en servidor y aísla registros y archivos por dueño", async () => {
+    const request = crypto.randomUUID();
+    const args = [
+      a,
+      request,
+      "nsfw-gen-illustrious",
+      "A mountain",
+      "512x512",
+      12,
+      7.5,
+      null,
+    ];
+    const sql = "select begin_image_generation($1,$2,$3,$4,$5,$6,$7,$8) as id";
+    const imageId = (await db.query<{ id: string }>(sql, args)).rows[0].id;
+    expect(
+      (await asUser(a, "select id from image_generations")).rows,
+    ).toHaveLength(1);
+    expect(
+      (await asUser(b, "select id from image_generations")).rows,
+    ).toHaveLength(0);
+    await expect(asUser(a, sql, args)).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(a, "update image_generations set status='complete'"),
+    ).rejects.toThrow(/permission denied/);
+    await expect(db.query(sql, args)).rejects.toThrow(/DUPLICATE_REQUEST/);
+    await expect(
+      db.query(sql, [a, crypto.randomUUID(), ...args.slice(2)]),
+    ).rejects.toThrow(/GENERATION_RUNNING/);
+    await db.query(
+      "insert into storage.objects(bucket_id,name) values('forma-images',$1)",
+      [a + "/" + imageId + ".png"],
+    );
+    expect(
+      (await asUser(a, "select name from storage.objects")).rows,
+    ).toHaveLength(1);
+    expect(
+      (await asUser(b, "select name from storage.objects")).rows,
+    ).toHaveLength(0);
+    await db.query(
+      "update image_generations set status='complete' where id=$1",
+      [imageId],
+    );
+    await db.query("update user_limits set daily_images=1 where user_id=$1", [
+      a,
+    ]);
+    await expect(
+      db.query(sql, [a, crypto.randomUUID(), ...args.slice(2)]),
+    ).rejects.toThrow(/DAILY_LIMIT/);
+  });
+  it("no autoriza IDs ni parámetros de imagen fuera de la lista", async () => {
+    const sql =
+      "select begin_image_generation($1,gen_random_uuid(),$2,$3,$4,$5,$6,null)";
+    await expect(
+      db.query(sql, [b, "other-model", "A tree", "512x512", 12, 7.5]),
+    ).rejects.toThrow(/MODEL_NOT_ALLOWED/);
+    await expect(
+      db.query(sql, [b, "hassaku-hentai", "A tree", "9000x9000", 12, 7.5]),
+    ).rejects.toThrow(/INVALID_SIZE/);
+    await expect(
+      db.query(sql, [b, "hassaku-hentai", "A tree", "512x512", 200, 7.5]),
+    ).rejects.toThrow(/INVALID_PARAMETERS/);
   });
   it("B no puede leer, editar ni eliminar conversación de A", async () => {
     expect(

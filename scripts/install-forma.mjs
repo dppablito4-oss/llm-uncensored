@@ -12,8 +12,13 @@ const sql =
   [
     "supabase/migrations/202610300001_initial.sql",
     "supabase/migrations/202610300002_nanogpt_models.sql",
+    "supabase/migrations/202610300003_images.sql",
   ]
-    .map((file) => readFileSync(file, "utf8"))
+    .map((file) =>
+      readFileSync(file, "utf8")
+        .replace(/^begin;\s*/i, "")
+        .replace(/commit;\s*$/i, ""),
+    )
     .join("\n") +
   "\ncommit;\n";
 const file = "supabase/.temp/forma-install.sql";

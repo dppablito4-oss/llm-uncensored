@@ -36,6 +36,7 @@ export function Settings() {
         "presets",
         "memories",
         "usage_events",
+        "image_generations",
       ];
       const data = await Promise.all(tables.map((t) => list(t)));
       download(
@@ -171,7 +172,7 @@ export function Settings() {
         </article>
       )}
       <article className="settings-card">
-        <h2>Uso de API</h2>
+        <h2>Uso del chat</h2>
         <div className="stats">
           <div>
             <strong>{usage.length}</strong>
@@ -203,6 +204,10 @@ export function Settings() {
       </article>
       <article className="settings-card">
         <h2>Tus datos</h2>
+        <p className="muted small">
+          La exportación incluye los metadatos de tus imágenes. Descarga los
+          archivos desde la galería.
+        </p>
         <div className="row">
           <Button variant="outline" onClick={() => void exportData()}>
             <Download size={16} />

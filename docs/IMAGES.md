@@ -1,0 +1,35 @@
+﻿# Generación de imágenes
+
+La sección Imágenes usa NanoGPT con `LLM_UNC_API_KEY` desde la Edge Function `image-generate`. Se ofrecen exclusivamente los modelos solicitados:
+
+- Animagine XL 4.0: ID `nsfw-gen-illustrious`.
+- Moxie Diffusion XL: ID `hassaku-hentai`.
+
+Los nombres e IDs se verificaron en el [catálogo oficial](https://nano-gpt.com/api/v1/images/models). La instantánea de precios y tamaños está en `shared/image-models.json`. Ambos cuestan USD 0.0034 por imagen de 512×512, USD 0.0051 a 1024×1024 y USD 0.0068 a 2048×2048 en la consulta del 30 de octubre de 2026. La interfaz muestra la tarifa de la resolución elegida. Se guarda el costo real reportado por el proveedor, o null si no lo reporta.
+
+## Interfaz y límites
+
+Texto a imagen, una imagen por solicitud, nueve resoluciones, 1–50 pasos, CFG 0–20 y semilla opcional entre 0 y 2147483647. Los valores iniciales son 1024×1024, 12 pasos y CFG 7.5. Una misma semilla no garantiza imágenes idénticas. No se implementa todavía edición de imágenes de referencia.
+
+La galería muestra las últimas 50 solicitudes con sus parámetros y estado. No se reintentan automáticamente solicitudes facturables. Si se interrumpe la conexión, actualiza la galería antes de generar de nuevo.
+
+El servidor reserva la solicitud antes de llamar al proveedor, verifica los modelos y tamaños permitidos y aplica una generación activa por usuario, 4 solicitudes por minuto y `forma.user_limits.daily_images` por día UTC (20 por defecto). Los intentos fallidos también cuentan, porque un error o una desconexión no demuestran ausencia de cargo. La reserva se identifica por usuario/request_id para evitar cobros duplicados del mismo envío.
+
+## Almacenamiento y seguridad
+
+La tabla `forma.image_generations` tiene RLS de lectura por dueño. El navegador no puede escribir estados, consumos ni reservas. La función privilegiada `forma.begin_image_generation` solo se concede a service_role. Las imágenes se guardan en el bucket privado `forma-images` con rutas usuario/UUID; una política permite al usuario firmar y descargar únicamente sus archivos. Los enlaces de vista previa vencen después de una hora y se renuevan desde la galería.
+
+El backend acepta solo PNG, JPEG y WebP, hasta 20 MB. No devuelve claves ni cuerpos privados de error. El costo y la imagen persisten también al cambiar de página, siempre que la función termine; una terminación abrupta del runtime puede dejar una solicitud en ejecución sin archivo.
+
+## Instalación y pruebas
+
+Para este proyecto se aplicó únicamente `supabase/migrations/202610300003_images.sql` sobre la instalación Forma existente y se desplegó `image-generate`. En una instalación nueva, `scripts/install-forma.mjs` incluye las tres migraciones dentro de su transacción. El proyecto alojado mantiene el historial de migraciones de la otra aplicación; no uses db reset ni migration repair.
+
+```bash
+supabase functions deploy image-generate --project-ref TU_PROJECT_REF
+node --env-file=.env.local scripts/smoke-images.mjs TU_PROJECT_REF
+```
+
+La prueba explícita genera una imagen de paisaje con cada modelo, comprueba acceso firmado, RLS entre dos cuentas y elimina archivos/cuentas temporales. Cada modelo pasó con un costo reportado de USD 0.0034. Las pruebas locales cubren validación, reservas, cuotas, protección de secretos, almacenamiento privado y selección en la interfaz.
+
+API utilizada: [Image Generation OpenAI-Compatible](https://docs.nano-gpt.com/api-reference/endpoint/image-generation-openai), `POST https://nano-gpt.com/api/v1/images/generations`, respuesta b64_json y posterior guardado privado. Se soportan los campos size, num_inference_steps, guidance_scale y seed.

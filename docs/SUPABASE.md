@@ -1,6 +1,6 @@
-﻿# Supabase: backend aislado de Forma
+# Supabase: backend aislado de Forma
 
-Proyecto conectado: `goegjuglstapjwcckawp`. Las ocho tablas `models`, `profiles`, `presets`, `conversations`, `messages`, `memories`, `usage_events` y `user_limits` viven en el esquema **forma**. Se conservan las tablas ajenas de `public` y la tabla inicial `public.forma_connection_checks`.
+Proyecto conectado: `goegjuglstapjwcckawp`. Las ocho tablas base `models`, `profiles`, `presets`, `conversations`, `messages`, `memories`, `usage_events` y `user_limits` viven en el esquema **forma**. Se conservan las tablas ajenas de `public` y la tabla inicial `public.forma_connection_checks`.
 
 Frontend y Edge usan `db.schema = forma`. Al iniciar sesión, `forma.ensure_workspace()` crea de forma idempotente el perfil, las cuotas y tres presets del usuario autenticado. No se agrega un trigger de registro a `auth.users`: los usuarios de la otra aplicación no reciben perfiles Forma automáticamente.
 
@@ -13,7 +13,7 @@ npx supabase link --project-ref TU_PROJECT_REF
 node scripts/install-forma.mjs TU_PROJECT_REF
 ```
 
-El instalador comprueba el proyecto vinculado y ejecuta ambos SQL en una transacción. Falla si `forma` ya existe. No borra ni reinstala datos. En el proyecto compartido no uses `db push`, `db reset` ni `migration repair`: conserva el historial de la otra aplicación.
+Adem?s se agreg? `forma.image_generations` y el bucket privado `forma-images`; consulta [IMAGES.md](IMAGES.md). El instalador comprueba el proyecto vinculado y ejecuta las tres migraciones SQL en una transacción. Falla si `forma` ya existe. No borra ni reinstala datos. En el proyecto compartido no uses `db push`, `db reset` ni `migration repair`: conserva el historial de la otra aplicación.
 
 Expón `forma` en la Data API conservando todos los esquemas existentes. En este proyecto se verificó la lista anterior `public,graphql_public` y se amplió mediante configuración PostgreSQL:
 

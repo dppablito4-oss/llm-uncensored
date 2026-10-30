@@ -6,7 +6,7 @@ El nombre del repositorio no garantiza que un modelo acepte cualquier petición.
 
 ## Para empezar al llegar a casa
 
-El backend conectado usa ocho tablas dentro del esquema separado `forma`, con autorización para compartir el proyecto Supabase. La instalación conserva las tablas de la otra aplicación y no agrega triggers de registro a Auth. Consulta [configuración de Supabase](docs/SUPABASE.md).
+El backend conectado usa nueve tablas dentro del esquema separado `forma`, con autorización para compartir el proyecto Supabase. La instalación conserva las tablas de la otra aplicación y no agrega triggers de registro a Auth. Consulta [configuración de Supabase](docs/SUPABASE.md).
 
 Necesitas Node.js 22 LTS, Git, una cuenta Supabase y una clave NanoGPT con saldo. Para la CLI Supabase, utiliza la distribución oficial o `npx supabase` (no instalar globalmente con npm).
 
@@ -118,3 +118,9 @@ tests/                   pruebas unitarias e integración reproducibles
 - Los reintentos de generación son manuales. No se repite automáticamente un POST con posibles cargos; cada regeneración explícita tiene un UUID nuevo.
 
 Fuentes técnicas: [Supabase Auth en Edge](https://supabase.com/docs/guides/functions/auth), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [NanoGPT API](https://docs.nano-gpt.com/api-reference/endpoint/chat-completion), [catálogo de modelos](https://nano-gpt.com/api/v1/models?detailed=true), [GitHub Pages con Actions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+## Imágenes
+
+La sección **Imágenes** ofrece Animagine XL 4.0 y Moxie Diffusion XL, con tamaño, pasos, CFG, semilla opcional y precio antes de generar. Incluye galería privada y descarga. Ver [docs/IMAGES.md](docs/IMAGES.md).
+
+La app está publicada en [GitHub Pages](https://dppablito4-oss.github.io/llm-uncensored/). Los despliegues desde main se validan antes de publicar.
