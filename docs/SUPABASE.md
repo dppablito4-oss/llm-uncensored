@@ -46,3 +46,13 @@ Solo el administrador modifica cuotas en `forma.user_limits` o habilita modelos 
 `npm run check:supabase` es de solo lectura. La prueba explícita `node --env-file=.env.local scripts/smoke-hosted.mjs TU_PROJECT_REF` crea dos cuentas temporales, comprueba RLS y ejecuta una generación corta facturada; elimina las cuentas en `finally`. Las claves administrativas de la CLI permanecen en memoria.
 
 La suite local usa PostgreSQL PGlite y prueba también que se conserva una tabla ajena `public.profiles`. pgTAP con Supabase local requiere Docker.
+
+## Estado actual de confirmación por correo
+
+Revisión del 30 de octubre de 2026: email habilitado, confirmación obligatoria, dominio `https://chat.sypablitodp.site/` autorizado. No hay servidor SMTP personalizado ni hook de envío configurado. El límite de email reportado es 2 mensajes por hora.
+
+Se validó una cuenta temporal sin enviar correo: el login antes de confirmar devuelve email_not_confirmed, el token de confirmación es aceptado y después se obtiene sesión. La cuenta se eliminó. Esto valida el flujo de confirmación, no la entrega real a una bandeja de entrada.
+
+Para enviar confirmaciones y recuperaciones a usuarios externos configura SMTP en Supabase Authentication: host, puerto, usuario, contraseña del servicio SMTP y correo remitente verificado. Las credenciales quedan en Supabase; no se agregan a VITE ni a GitHub Pages. La configuración de Auth/SMTP es compartida con la otra aplicación de este proyecto.
+
+El servidor predeterminado de Supabase solo envía a direcciones del equipo y no está pensado para producción. Fuente: https://supabase.com/docs/guides/auth/auth-smtp.

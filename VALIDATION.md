@@ -38,3 +38,9 @@ Quedan pendientes correo real de confirmaci?n/recuperaci?n, prueba en Android y 
 ## Correcci?n de pantalla en blanco
 
 El dominio personalizado sirve desde la ra?z. Se corrigi? la base de Vite, antes /llm-uncensored/, que provocaba 404 en JavaScript/CSS. CNAME se incluye en el repositorio y en el artefacto de Pages. Se a?adi? una regresi?n del dominio y verificaci?n de archivos compilados. El dominio est? autorizado en CORS de ambas Edge Functions y en las redirecciones de Auth, conservando las direcciones anteriores. HTTPS est? habilitado en Pages.
+
+## Favicon y confirmación
+
+Se agregó un favicon SVG propio de Forma, fondo carbón y símbolo verde salvia, servido desde public/favicon.svg y enlazado con la base de Vite.
+
+La revisión de Auth confirmó email obligatorio, dominio autorizado y ausencia de SMTP personalizado. Una cuenta temporal no pudo iniciar sesión sin confirmar; el token fue verificado y después obtuvo sesión. Se eliminó sin enviar correo. La entrega real sigue pendiente de SMTP: el servidor predeterminado limita envíos a miembros del equipo y a 2 mensajes por hora en la configuración actual.
