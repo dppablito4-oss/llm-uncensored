@@ -1,39 +1,32 @@
-# Estado de entrega y validación
+﻿# Estado de validación
 
 Fecha: 30 de octubre de 2026, America/Lima.
 
-## Implementado
+## Backend alojado comprobado
 
-Frontend React/TypeScript con Auth, rutas protegidas, chat SSE, cancelación, regeneración/edición, historial persistido, CRUD de presets/memorias y ajustes. Migración SQL con RLS y transacciones privilegiadas para idempotencia, propiedad y cuotas. Edge Function Deno con JWT, CORS, OpenRouter, contexto desde base de datos y persistencia completa/parcial. Workflow de validación y Pages; documentación de configuración.
+- Proyecto `goegjuglstapjwcckawp` vinculado mediante CLI autenticada.
+- Ocho tablas con RLS y 41 modelos habilitados en `forma`. Las 19 tablas originales y `public.forma_connection_checks` permanecen en `public`.
+- Instalación transaccional sin reparar ni modificar el historial de migraciones de la otra aplicación. Ningún trigger nuevo de registro en `auth.users`.
+- Esquema `forma` expuesto conservando `public,graphql_public`. Frontend y Edge usan ese esquema expresamente.
+- `chat-stream` desplegado con gateway JWT, verificación adicional contra Auth y CORS específico `FORMA_ALLOWED_ORIGINS`.
+- Se confirmó la presencia de `LLM_UNC_API_KEY` sin leer ni guardar su valor en el repo.
+- Dos cuentas temporales: login, inicialización de perfil/cuotas/tres presets, catálogo de 41 modelos y aislamiento entre usuarios comprobados.
+- Generación real con `z-ai/glm-5.3-flash-uncensored`: SSE confirmado y respuesta persistida como `complete`. Consumo reportado: 44 tokens de entrada, 8 de salida y USD 0.0000152.
+- Las dos cuentas y sus datos se eliminaron al terminar.
 
-## Ejecutado y comprobado
+## Validación local
 
-| Comprobación                                                                     | Resultado                                                                                                                                               |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run lint`                                                                   | Pasa                                                                                                                                                    |
-| `npm run typecheck`                                                              | Pasa                                                                                                                                                    |
-| `npm test`                                                                       | 46 pruebas, 5 archivos, todas pasan                                                                                                                     |
-| `npm run build`                                                                  | Pasa; base `/llm-uncensored/`, assets divididos en chunks                                                                                               |
-| `npm run verify:dist`                                                            | Pasa; rutas de Pages y frontera de secretos en el JS compilado                                                                                          |
-| Deno 2 `check --node-modules-dir=manual supabase/functions/chat-stream/index.ts` | Pasa                                                                                                                                                    |
-| Migración SQL                                                                    | Ejecutada por la suite en PostgreSQL PGlite con roles y Auth mínimos de prueba                                                                          |
-| RLS y transacciones                                                              | Aislamiento A/B, CRUD, claves compuestas, mensajes solo servidor, consumo/cuotas solo servidor, idempotencia, estados parciales, edición y regeneración |
-| Protocolo SSE                                                                    | UTF-8 fragmentado, uso, confirmación, HTTP 402/404/429/500, error intermedio, EOF incompleto y cancelación                                              |
-| Flujo React                                                                      | Login, envío, SSE con proveedor simulado y recuperación desde historial; registro y recuperación por correo con API simulada                            |
-| Edge handler                                                                     | SDK Supabase real con transporte simulado; JWT inválido, origen inválido, propiedad, solicitudes inválidas, error de proveedor y cancelación            |
-| Catálogo público OpenRouter                                                      | El ID inicial estaba listado; no se ejecutó una inferencia                                                                                              |
-| Navegador de escritorio                                                          | Pantalla de configuración y diseño de acceso renderizados; variables públicas ficticias utilizadas solo para la revisión de acceso y eliminadas después |
+ESLint, TypeScript, 52 pruebas en 6 archivos y compilación pasan. La suite cubre UI con proveedor simulado, cambio de modelo/tarifa, SSE, contexto, catálogo/precios, handler Edge, PostgreSQL PGlite, permisos, idempotencia y cuotas. El chequeo Deno de la Edge Function pasa. `verify:dist` comprueba rutas y ausencia de secretos de backend en el bundle. La prueba UI permite hasta 5 segundos tras streaming/navegación.
 
-La compilación puede mostrar avisos de Rollup sobre comentarios de optimización de Zod; no son errores. No se ocultaron fallos de pruebas para obtener este resultado.
+## Interfaz
 
-## Pendiente de configuración externa
+Selector en chat, presets y configuración con precios de entrada/salida en USD por millón. Panel con descripción oficial, contexto, salida máxima y capacidades. GLM 5.3 Flash Uncensored predeterminado. Catálogo fechado actualizable con `npm run sync:models`.
 
-- El repositorio remoto ya existe en `dppablito4-oss/llm-uncensored`; se carga este código conservando su licencia MIT. Verificar el resultado del workflow en GitHub Actions.
-- Conectar el proyecto Supabase, aplicar la migración y desplegar `chat-stream`.
-- Configurar las dos variables públicas, secretos de backend, orígenes CORS y redirecciones de Auth.
-- Verificar confirmación/recuperación por correo real e inferencia OpenRouter con saldo.
-- Habilitar Pages, ejecutar GitHub Actions y comprobar su URL desplegada.
-- Ejecutar pgTAP en el stack Supabase local: no hay Docker/CLI Supabase instalada en este entorno. La migración sí fue probada en PGlite.
-- Probar Android real y el chat conectado en el navegador. Los tests UI no sustituyen estas verificaciones.
+## Pendiente
 
-El código está preparado para el repositorio indicado. No se afirma que exista un backend conectado ni un sitio publicado. Si faltan las variables públicas, CI valida el proyecto y omite el despliegue con una nota explicativa.
+- Publicación del frontend actualizado en Pages y revisión visual con sesión real, especialmente Android.
+- Confirmación/recuperación por correo real, conservando las URLs Auth de la otra aplicación.
+- pgTAP con Docker/Supabase local.
+- Solo se probó inferencia real con GLM inicial. Los otros 40 se verificaron en catálogo; no se facturó una llamada a cada uno.
+
+El backend está operativo y probado. El frontend actualizado está en el workspace y compila; estos cambios aún no se han publicado.

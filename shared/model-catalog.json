@@ -1,0 +1,1083 @@
+{
+  "source": "https://nano-gpt.com/api/v1/models?detailed=true",
+  "fetched_at": "2026-10-30T20:18:26.339Z",
+  "default_model": "z-ai/glm-5.3-flash-uncensored",
+  "models": [
+    {
+      "id": "z-ai/glm-5.3-flash-uncensored",
+      "name": "GLM 5.3 Flash Uncensored",
+      "description": "GLM 5.3 Flash Uncensored is an uncensored fine-tune of the efficient 320B mixture-of-experts reasoning model with provider-dependent vision support, built for unrestricted chat, creative writing, coding, agentic work, tool use, and long-context tasks.",
+      "context_length": 1048576,
+      "max_output_tokens": 32768,
+      "pricing": {
+        "prompt": 0.2,
+        "completion": 0.8,
+        "cacheReadInputPer1kTokens": 0.00007,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["low", "high", "max"]
+    },
+    {
+      "id": "abliteration-ai/abliterated-model-large-flash",
+      "name": "Abliterated Large Flash",
+      "description": "Abliterated Large Flash is an uncensored reasoning model based on DeepSeek V4.1-Flash-1017. It accepts text and images and returns text, with tool calling, JSON mode, JSON Schema output, and automatic prompt caching. Its shared input/output context is 1,048,576 tokens, with up to 262,144 output tokens when space permits. Reasoning defaults to high and can be turned off or set to low, high, or max. Supports up to four images across the request history.",
+      "context_length": 1048576,
+      "max_output_tokens": 262144,
+      "pricing": {
+        "prompt": 1,
+        "completion": 2,
+        "cacheReadInputPer1kTokens": 0.0001,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": true,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "id": "abliteration-ai/abliterated-model",
+      "name": "Abliterated Model",
+      "description": "Abliteration.ai's unrestricted multimodal reasoning model is weight-modified to reduce refusals and answer prompts the original model might reject. It supports text and image input, structured output, automatic prompt caching, and a 262K-token context window.",
+      "context_length": 262144,
+      "max_output_tokens": 262134,
+      "pricing": {
+        "prompt": 1,
+        "completion": 3,
+        "cacheReadInputPer1kTokens": 0.0001,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "id": "abliteration-ai/abliterated-model-large",
+      "name": "Abliterated Model Large",
+      "description": "Abliteration.ai's unrestricted large text reasoning model is derived from GLM-5.2 and weight-modified to reduce refusals compared with the base model. It supports native tool calling, structured output, automatic prompt caching, and a one-million-token context window.",
+      "context_length": 1000000,
+      "max_output_tokens": 999990,
+      "pricing": {
+        "prompt": 3,
+        "completion": 5,
+        "cacheReadInputPer1kTokens": 0.0003,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "id": "abliteration-ai/abliterated-model-large-v2",
+      "name": "Abliterated Model Large V2",
+      "description": "Abliteration.ai's default unrestricted large text reasoning model is derived from GLM-5.3 and weight-modified to reduce refusals compared with the base model. It supports native tool calling, structured output, automatic prompt caching, and a one-million-token context window.",
+      "context_length": 1048576,
+      "max_output_tokens": 999990,
+      "pricing": {
+        "prompt": 3,
+        "completion": 5,
+        "cacheReadInputPer1kTokens": 0.0003,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": ["low", "high", "max"]
+    },
+    {
+      "id": "z-ai/glm-5.3-flash-apex-abliterated",
+      "name": "Apex Flash 1 Abliterated",
+      "description": "Apex Flash 1 Abliterated is an experimental derivative of Cantina Security and Yeta's Apex Flash 1 with modified refusal behavior.",
+      "context_length": 1048576,
+      "max_output_tokens": 32768,
+      "pricing": {
+        "prompt": 0.15,
+        "completion": 0.5,
+        "cacheReadInputPer1kTokens": 0.000075,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["low", "high", "max"]
+    },
+    {
+      "id": "heabsy/cyberheabsy",
+      "name": "CyberHeabsy",
+      "description": "A low-refusal text model for authorized security research, roleplay, and creative writing. It preserves tool calling after refusal removal, supports optional reasoning, and has a 1M-token context window.",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "pricing": {
+        "prompt": 1.5,
+        "completion": 4.5,
+        "cacheReadInputPer1kTokens": 0.000275,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": ["none", "low", "medium", "high"]
+    },
+    {
+      "id": "huihui-ai/DeepSeek-R1-Distill-Llama-70B-abliterated",
+      "name": "DeepSeek R1 Llama 70B Abliterated",
+      "description": "Uncensored version of the Deepseek R1 Llama 70B model",
+      "context_length": 16384,
+      "max_output_tokens": 8192,
+      "pricing": {
+        "prompt": 0.7,
+        "completion": 0.7,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "huihui-ai/DeepSeek-R1-Distill-Qwen-32B-abliterated",
+      "name": "DeepSeek R1 Qwen Abliterated",
+      "description": "Uncensored version of the Deepseek R1 Qwen 32B model",
+      "context_length": 16384,
+      "max_output_tokens": 8192,
+      "pricing": {
+        "prompt": 1.4,
+        "completion": 1.4,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-0910-uncensored",
+      "name": "DeepSeek V4.1 Flash 0910 Uncensored",
+      "description": "Uncensored DeepSeek V4.1 Flash with text and image input, optional reasoning, and tool calling. The date label is retained for compatibility; the served checkpoint can vary with availability.",
+      "context_length": 524288,
+      "max_output_tokens": 32768,
+      "pricing": {
+        "prompt": 0.33,
+        "completion": 1.32,
+        "cacheReadInputPer1kTokens": 0.00000825,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "low", "high", "max"]
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking",
+      "name": "DeepSeek V4.1 Flash 0910 Uncensored Thinking",
+      "description": "Uncensored DeepSeek V4.1 Flash with text and image input, optional reasoning, and tool calling. The date label is retained for compatibility; the served checkpoint can vary with availability.",
+      "context_length": 524288,
+      "max_output_tokens": 32768,
+      "pricing": {
+        "prompt": 0.33,
+        "completion": 1.32,
+        "cacheReadInputPer1kTokens": 0.00000825,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "low", "high", "max"]
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-1017-uncensored",
+      "name": "DeepSeek V4.1 Flash 1017 Uncensored",
+      "description": "Uncensored DeepSeek V4.1 Flash with text and image input, optional reasoning, and tool calling. The date label is retained for compatibility; the served checkpoint can vary with availability.",
+      "context_length": 1048576,
+      "max_output_tokens": 393216,
+      "pricing": {
+        "prompt": 0.33,
+        "completion": 1.32,
+        "cacheReadInputPer1kTokens": 0.00000825,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "low", "high", "max"]
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking",
+      "name": "DeepSeek V4.1 Flash 1017 Uncensored Thinking",
+      "description": "Uncensored DeepSeek V4.1 Flash with text and image input, optional reasoning, and tool calling. The date label is retained for compatibility; the served checkpoint can vary with availability.",
+      "context_length": 1048576,
+      "max_output_tokens": 393216,
+      "pricing": {
+        "prompt": 0.33,
+        "completion": 1.32,
+        "cacheReadInputPer1kTokens": 0.00000825,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "low", "high", "max"]
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-uncensored",
+      "name": "DeepSeek V4.1 Flash Uncensored",
+      "description": "A lower-refusal finetune of DeepSeek V4.1 Flash with text and image input, optional reasoning, and tool calling. Supports a context window of up to 1M tokens.",
+      "context_length": 1048576,
+      "max_output_tokens": 393216,
+      "pricing": {
+        "prompt": 0.33,
+        "completion": 1.32,
+        "cacheReadInputPer1kTokens": 0.00000825,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "low", "medium", "high"]
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash-uncensored:thinking",
+      "name": "DeepSeek V4.1 Flash Uncensored Thinking",
+      "description": "A lower-refusal finetune of DeepSeek V4.1 Flash with text and image input, optional reasoning, and tool calling. Supports a context window of up to 1M tokens.",
+      "context_length": 1048576,
+      "max_output_tokens": 393216,
+      "pricing": {
+        "prompt": 0.33,
+        "completion": 1.32,
+        "cacheReadInputPer1kTokens": 0.00000825,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "low", "medium", "high"]
+    },
+    {
+      "id": "gemma-4-26b-a4b-it-chimeraxheretic",
+      "name": "Gemma 4 26B A4B Chimera X Heretic",
+      "description": "Chimera X Heretic is a Gemma 4 26B A4B multimodal mixture-of-experts fine-tune for creative writing, expressive dialogue, and roleplay.",
+      "context_length": 262144,
+      "max_output_tokens": 32768,
+      "pricing": {
+        "prompt": 0.12000000000000001,
+        "completion": 0.38,
+        "cacheReadInputPer1kTokens": 0.00006,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "TEE/gemma-4-26b-a4b-uncensored",
+      "name": "Gemma 4 26B A4B Uncensored TEE",
+      "description": "Gemma 4 26B A4B Uncensored Heretic is an MoE model tuned to reduce refusal behavior while preserving coding, reasoning, and function-calling strengths. Running inside a TEE (Trusted Execution Environment), with provider attestation support. Image input is unavailable on this deployment.",
+      "context_length": 65536,
+      "max_output_tokens": 65536,
+      "pricing": {
+        "prompt": 0.15,
+        "completion": 0.7,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "Gemma-4-31B-Cognitive-Unshackled",
+      "name": "Gemma 4 31B Cognitive Unshackled",
+      "description": "ArliAI-hosted Gemma 4 31B finetune for open-ended reasoning, character chat, and multimodal creative work.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "Gemma-4-31B-Gembrain-uncensored-heretic",
+      "name": "Gemma 4 31B Gembrain Uncensored Heretic",
+      "description": "Gemma 4 31B Gembrain Uncensored Heretic is a community creative finetune for reasoning, multimodal chat, expressive writing, and roleplay.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "Gemma-4-31B-SDFT-Heretic-RP",
+      "name": "Gemma 4 31B SDFT Heretic RP",
+      "description": "Gemma 4 31B SDFT Heretic RP is a community creative finetune for reasoning, multimodal chat, expressive writing, and roleplay.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "GLM-4.6-Derestricted-v5",
+      "name": "GLM 4.6 Derestricted v5",
+      "description": "Derestricted GLM 4.6 tuned for open-ended creative writing and roleplay with relaxed filters.",
+      "context_length": 131072,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.4,
+        "completion": 1.5,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "z-ai/glm-5.3-uncensored",
+      "name": "GLM 5.3 Uncensored",
+      "description": "An experimental uncensored version of the full GLM 5.3 reasoning model for chat, creative writing, coding, and tool use. It may show unusual behavior or inconsistent response quality.",
+      "context_length": 1048576,
+      "max_output_tokens": 131072,
+      "pricing": {
+        "prompt": 1.25,
+        "completion": 2.25,
+        "cacheReadInputPer1kTokens": 0.0003,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["low", "high", "max"]
+    },
+    {
+      "id": "nousresearch/hermes-3-llama-3.1-70b",
+      "name": "Hermes 3 70B",
+      "description": "Hermes 3 is a generalist language model with many improvements over Hermes 2, including advanced agentic capabilities, better roleplaying, reasoning, multi-turn conversation, and long context coherence. This 70B model is a competitive finetune of Llama-3.1-70B focused on aligning LLMs to the user with powerful steering capabilities.",
+      "context_length": 65536,
+      "max_output_tokens": 8192,
+      "pricing": {
+        "prompt": 0.408,
+        "completion": 0.408,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "failspy/Meta-Llama-3-70B-Instruct-abliterated-v3.5",
+      "name": "Llama 3 70B abliterated",
+      "description": "An abliterated (removed restrictions and censorship) version of Llama 3.1 70b.",
+      "context_length": 8192,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.7,
+        "completion": 0.7,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "aion-labs/aion-rp-llama-3.1-8b",
+      "name": "Llama 3.1 8b (uncensored)",
+      "description": "This is a truly uncensored model, trained to excel at roleplaying and creative writing. However, it can also do other things!",
+      "context_length": 32768,
+      "max_output_tokens": 16384,
+      "pricing": {
+        "prompt": 0.8,
+        "completion": 1.6,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "huihui-ai/Llama-3.3-70B-Instruct-abliterated",
+      "name": "Llama 3.3 70B Instruct abliterated",
+      "description": "An abliterated (removed restrictions and censorship) version of Llama 3.3 70b.",
+      "context_length": 32768,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.7,
+        "completion": 0.7,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-flash-abliterated",
+      "name": "MiMo V2.6 Flash Abliterated",
+      "description": "A MiMo V2.6 Flash finetune with refusal-direction ablation, image input, a 1M-token context window, separate reasoning output, and tool calling.",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "pricing": {
+        "prompt": 0.5,
+        "completion": 1.5,
+        "cacheReadInputPer1kTokens": 0.000275,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-flash-uncensored",
+      "name": "MiMo V2.6 Flash Uncensored",
+      "description": "A lower-refusal MiMo V2.6 Flash finetune with a 1M-token context window, separate reasoning output, and tool calling. Supports image input and adjustable thinking effort.",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "pricing": {
+        "prompt": 0.5,
+        "completion": 1.5,
+        "cacheReadInputPer1kTokens": 0.0001995,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "low", "medium", "high"]
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-flash-uncensored:thinking",
+      "name": "MiMo V2.6 Flash Uncensored Thinking",
+      "description": "MiMo V2.6 Flash Uncensored with maximum thinking enabled. Supports a 1M-token context window and tool calling.",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "pricing": {
+        "prompt": 0.5,
+        "completion": 1.5,
+        "cacheReadInputPer1kTokens": 0.0001995,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["max"]
+    },
+    {
+      "id": "mlabonne/NeuralDaredevil-8B-abliterated",
+      "name": "Neural Daredevil 8B abliterated",
+      "description": "The best performing 8B abliterated model according to most benchmarks.",
+      "context_length": 8192,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.44,
+        "completion": 0.44,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "orca/orcacyber-zero-1.5",
+      "name": "OrcaCyber Zero 1.5",
+      "description": "OrcaRouter's frontier cybersecurity model, post-trained for authorized security research: vulnerability research and reproduction, exploit development, penetration testing, and security auditing. Supports a 1M-token context window, optional reasoning, tool calling, and structured output. Offensive work is permitted only within an authorized security engagement.",
+      "context_length": 999488,
+      "max_output_tokens": 128000,
+      "pricing": {
+        "prompt": 3,
+        "completion": 7.5,
+        "cacheReadInputPer1kTokens": 0.00075,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": ["none", "low", "medium", "high"]
+    },
+    {
+      "id": "huihui-ai/Qwen2.5-32B-Instruct-abliterated",
+      "name": "Qwen 2.5 32B Abliterated",
+      "description": "Uncensored version of Qwen 2.5 32B Instruct with restrictions removed.",
+      "context_length": 32768,
+      "max_output_tokens": 8192,
+      "pricing": {
+        "prompt": 0.7,
+        "completion": 0.7,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "qwen/qwen3.8-27b-uncensored",
+      "name": "Qwen 3.8 27B Uncensored",
+      "description": "Qwen 3.8 27B Uncensored is an FP8 open-weight multimodal model LoRA-tuned for fewer refusals across chat, coding, reasoning, tool use, and long-context work.",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "pricing": {
+        "prompt": 1,
+        "completion": 3,
+        "cacheReadInputPer1kTokens": 0.00022,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "heabsy/qwen3.8-27b-uncensored-fast",
+      "name": "Qwen 3.8 27B Uncensored Fast by Heabsy",
+      "description": "Heabsy's NVFP4 build of Qwen3.8-27B by Alibaba Cloud, with refusal removal based on huihui-ai's Huihui-Qwen3.8-27B-abliterated. Quantized and calibrated by Heabsy, with unpublished weights under the Heabsy Model License. Supports text and image input, tools, and optional reasoning capped at 16,384 tokens within the output budget. This named build is separate from Qwen 3.8 27B Uncensored.",
+      "context_length": 524288,
+      "max_output_tokens": 235929,
+      "pricing": {
+        "prompt": 1,
+        "completion": 3,
+        "cacheReadInputPer1kTokens": 0.00022,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": false
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "qwen/qwen3.8-27b-uncensored:thinking",
+      "name": "Qwen 3.8 27B Uncensored Thinking",
+      "description": "Qwen 3.8 27B Uncensored with thinking enabled for more deliberate creative work, coding, multimodal analysis, tool use, and long-context problem solving.",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "pricing": {
+        "prompt": 1,
+        "completion": 3,
+        "cacheReadInputPer1kTokens": 0.00022,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": true,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    },
+    {
+      "id": "Qwen3.5-27B-Blossom-V6.4-Derestricted",
+      "name": "Qwen3.5 27B Blossom V6.4 Derestricted",
+      "description": "Qwen3.5 27B Blossom V6.4 Derestricted is a community creative finetune for reasoning, multimodal chat, expressive writing, and roleplay.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "Qwen3.5-27B-BlueStar-v3-Derestricted",
+      "name": "Qwen3.5 27B BlueStar v3 Derestricted",
+      "description": "Third-generation BlueStar finetune for creative roleplay, narrative prose, and multimodal Qwen3.5 27B workflows.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Derestricted",
+      "name": "Qwen3.5 27B Claude 4.6 Opus Reasoning Distilled Derestricted",
+      "description": "Qwen3.5 27B Claude 4.6 Opus Reasoning Distilled Derestricted is a community creative finetune for reasoning, multimodal chat, expressive writing, and roleplay.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "cacheReadInputPer1kTokens": 0.000030600000000000005,
+        "cacheWriteInputPer1kTokens": 0.00038250000000000003,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Derestricted-Lite",
+      "name": "Qwen3.5 27B Claude 4.6 Opus Reasoning Distilled Derestricted Lite",
+      "description": "Qwen3.5 27B Claude 4.6 Opus Reasoning Distilled Derestricted Lite is a lighter-tuned community finetune for responsive multimodal chat, expressive writing, and roleplay.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "cacheReadInputPer1kTokens": 0.000030600000000000005,
+        "cacheWriteInputPer1kTokens": 0.00038250000000000003,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "Qwen3.5-27B-Queen-Derestricted",
+      "name": "Qwen3.5 27B Queen Derestricted",
+      "description": "Queen finetune for derestricted creative writing, roleplay, and expressive character dialogue.",
+      "context_length": 262144,
+      "max_output_tokens": null,
+      "pricing": {
+        "prompt": 0.306,
+        "completion": 0.306,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": true,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": true,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": ["none", "high"]
+    },
+    {
+      "id": "venice-uncensored",
+      "name": "Venice Uncensored",
+      "description": "Venice's uncensored model. Built on the Dolphin Mistral 24b model with a very low refusal rate.",
+      "context_length": 128000,
+      "max_output_tokens": 8192,
+      "pricing": {
+        "prompt": 0.4,
+        "completion": 1.8,
+        "cacheReadInputPer1kTokens": 0.0004,
+        "currency": "USD",
+        "unit": "per_million_tokens"
+      },
+      "capabilities": {
+        "vision": false,
+        "video_input": false,
+        "audio_input": false,
+        "reasoning": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "structured_output": false,
+        "pdf_upload": false,
+        "batch_api": true
+      },
+      "reasoning_efforts": []
+    }
+  ]
+}

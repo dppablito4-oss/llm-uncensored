@@ -14,6 +14,8 @@
     "check:edge": "deno check --node-modules-dir=manual supabase/functions/chat-stream/index.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "verify:dist": "node scripts/verify-dist.mjs",
+    "check:supabase": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/check-supabase.mjs",
+    "sync:models": "node scripts/sync-models.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {

@@ -6,7 +6,9 @@ El nombre del repositorio no garantiza que un modelo acepte cualquier petición.
 
 ## Para empezar al llegar a casa
 
-Necesitas Node.js 22 LTS, Git, una cuenta Supabase y una clave OpenRouter con saldo. Para la CLI Supabase, utiliza la distribución oficial o `npx supabase` (no instalar globalmente con npm).
+El backend conectado usa ocho tablas dentro del esquema separado `forma`, con autorización para compartir el proyecto Supabase. La instalación conserva las tablas de la otra aplicación y no agrega triggers de registro a Auth. Consulta [configuración de Supabase](docs/SUPABASE.md).
+
+Necesitas Node.js 22 LTS, Git, una cuenta Supabase y una clave NanoGPT con saldo. Para la CLI Supabase, utiliza la distribución oficial o `npx supabase` (no instalar globalmente con npm).
 
 ```bash
 npm ci
@@ -20,12 +22,12 @@ VITE_SUPABASE_URL=https://TU_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=TU_CLAVE_PUBLICA
 ```
 
-Después configura Supabase según [docs/SUPABASE.md](docs/SUPABASE.md) y la inferencia según [docs/OPENROUTER.md](docs/OPENROUTER.md). Son necesarios la migración SQL, el secreto de OpenRouter, CORS y el despliegue de la función; rellenar `.env` por sí solo no crea el backend.
+Después configura Supabase según [docs/SUPABASE.md](docs/SUPABASE.md) y la inferencia según [docs/NANOGPT.md](docs/NANOGPT.md). Son necesarios la migración SQL, el secreto de NanoGPT, CORS y el despliegue de la función; rellenar `.env` por sí solo no crea el backend.
 
 ```bash
 npx supabase login
 npx supabase link --project-ref TU_PROJECT_REF
-npx supabase db push
+node scripts/install-forma.mjs TU_PROJECT_REF
 npx supabase functions deploy chat-stream
 npm run dev
 ```
@@ -39,12 +41,14 @@ Abre `http://localhost:5173/llm-uncensored/`. Si Vite elige otro puerto, añáde
 3. El gateway mantiene `verify_jwt = true`; la función también verifica el JWT contra Auth con `getUser`.
 4. Una transacción de PostgreSQL comprueba propiedad, modelo autorizado, preset del mismo dueño, idempotencia, solicitudes activas y cuotas. Reserva presupuesto y guarda el mensaje de usuario.
 5. El backend lee preset, preferencias, memorias activas e historial de PostgreSQL; arma un contexto limitado.
-6. OpenRouter transmite SSE. El frontend presenta los fragmentos mediante un lector compatible con UTF-8 y eventos partidos entre chunks.
+6. NanoGPT transmite SSE. El frontend presenta los fragmentos mediante un lector compatible con UTF-8 y eventos partidos entre chunks.
 7. El servidor finaliza mensaje y uso en una transacción. Solo después emite `done`. Cancelaciones/errores guardan texto disponible como `partial`, o uso `error` cuando no hay texto.
 
 `SUPABASE_SERVICE_ROLE_KEY` se utiliza exclusivamente dentro de la función para las transacciones privilegiadas. Nunca se incluye en el frontend.
 
 ## Funcionalidades
+
+- 41 modelos de NanoGPT del catálogo `Uncensored` o identificados como uncensored/abliterated, con GLM 5.3 Flash Uncensored predeterminado. Selector con precios de entrada/salida por millón de tokens y ficha de contexto, salida máxima y capacidades. Actualiza la instantánea con `npm run sync:models`.
 
 - Registro/login/logout, confirmación por email, recuperación y actualización de contraseña, rutas protegidas.
 - Sidebar con búsqueda por título, renombrar, archivar/recuperar y eliminar conversaciones.
@@ -75,7 +79,7 @@ Para comprobar Deno sin instalarlo permanentemente: `npm exec --yes --package de
 
 ## Publicación
 
-Ver [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md). El workflow primero instala, valida, prueba y compila. El despliegue solo continúa si existen las dos variables públicas del repositorio y Pages está habilitado con GitHub Actions. El secreto de OpenRouter no se introduce en GitHub Actions.
+Ver [docs/GITHUB_PAGES.md](docs/GITHUB_PAGES.md). El workflow primero instala, valida, prueba y compila. El despliegue solo continúa si existen las dos variables públicas del repositorio y Pages está habilitado con GitHub Actions. El secreto de NanoGPT no se introduce en GitHub Actions.
 
 Repositorio: [dppablito4-oss/llm-uncensored](https://github.com/dppablito4-oss/llm-uncensored). El backend y Pages requieren completar la configuración externa. El estado exacto de entrega está en [VALIDATION.md](VALIDATION.md).
 
@@ -101,16 +105,16 @@ tests/                   pruebas unitarias e integración reproducibles
 
 ## Límites conocidos
 
-- Falta verificar el backend alojado con tus credenciales, correos de confirmación/recuperación, una llamada facturada a OpenRouter y un despliegue real de Pages. PGlite ejecuta la migración con roles/Auth mínimos de prueba; no sustituye Supabase alojado.
+- Falta verificar el backend alojado con tus credenciales, correos de confirmación/recuperación, una llamada facturada a NanoGPT y un despliegue real de Pages. PGlite ejecuta la migración con roles/Auth mínimos de prueba; no sustituye Supabase alojado.
 - El parser y la UI están probados con SSE real de `ReadableStream` y proveedor simulado. La revisión visual en navegador cubre acceso/configuración en escritorio; queda una prueba real en Android y del chat conectado.
 - Memoria V1: se consideran las 100 memorias activas más recientes; se priorizan coincidencias léxicas con el mensaje actual y luego recencia. No hay embeddings ni memoria automática.
 - Contexto: hasta 60 mensajes recientes completos, leídos desde el servidor. Se usa una cota conservadora por bytes UTF-8 y margen por mensaje, no el tokenizador exacto del modelo. El texto parcial no se reutiliza como respuesta confirmada.
 - Timeout de generación: 120 segundos. La cancelación intenta detener al proveedor y guardar parcial; si el runtime se termina abruptamente, puede quedar un evento `running` sin texto. El bloqueo de conversación caduca tras 3 minutos y la reserva sigue contando para evitar gasto sin contabilizar.
 - Límites diarios según UTC. La reserva es contexto + salida máxima, y se conserva incluso si el proveedor consume menos; esto puede agotar la cuota antes de alcanzar el máximo de solicitudes. Modificar cuotas requiere SQL administrativo.
-- Los costos son informativos: se utiliza el costo devuelto por OpenRouter si existe; sin costo reportado se guarda `null`, nunca un precio inventado. Los tokens sin reporte se estiman conservadoramente.
+- Los costos son informativos: se utiliza el costo devuelto por NanoGPT si existe; sin costo reportado se guarda `null`, nunca un precio inventado. Los tokens sin reporte se estiman conservadoramente.
 - Las exportaciones y estadísticas paginan en bloques de 500. La exportación no es una instantánea transaccional: evita enviar mensajes mientras la ejecutas.
 - Las sesiones de una SPA se guardan en almacenamiento del navegador mediante Supabase; no hay cookies HttpOnly en GitHub Pages. No se renderiza HTML arbitrario ni se cargan scripts de terceros.
 - Un preset en uso por una conversación o como predeterminado no puede eliminarse hasta quitar esas referencias. Es una restricción deliberada para no romper relaciones.
 - Los reintentos de generación son manuales. No se repite automáticamente un POST con posibles cargos; cada regeneración explícita tiene un UUID nuevo.
 
-Fuentes técnicas: [Supabase Auth en Edge](https://supabase.com/docs/guides/functions/auth), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [OpenRouter API](https://openrouter.ai/docs/api-reference/overview), [catálogo de modelos](https://openrouter.ai/api/v1/models), [GitHub Pages con Actions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+Fuentes técnicas: [Supabase Auth en Edge](https://supabase.com/docs/guides/functions/auth), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [NanoGPT API](https://docs.nano-gpt.com/api-reference/endpoint/chat-completion), [catálogo de modelos](https://nano-gpt.com/api/v1/models?detailed=true), [GitHub Pages con Actions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).

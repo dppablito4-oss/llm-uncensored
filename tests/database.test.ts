@@ -4,7 +4,7 @@ import { beforeAll, afterAll, describe, it, expect } from "vitest";
 const db = new PGlite();
 const a = "11111111-1111-4111-8111-111111111111",
   b = "22222222-2222-4222-8222-222222222222",
-  model = "cognitivecomputations/dolphin-mistral-24b-venice-edition";
+  model = "z-ai/glm-5.3-flash-uncensored";
 let cid = "",
   preset = "";
 async function asUser<T>(uid: string, sql: string, params: unknown[] = []) {
@@ -19,27 +19,108 @@ beforeAll(async () => {
     `create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key,email text);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema public,auth to authenticated,anon,service_role;grant execute on function auth.uid() to authenticated;alter default privileges in schema public grant all on tables to service_role;alter default privileges in schema public grant all on sequences to service_role;`,
   );
   await db.exec(
+    "create table public.other_app_records(id integer primary key);grant select on public.other_app_records to anon;create table public.profiles(id integer primary key);insert into public.profiles values(123);",
+  );
+  await db.exec(
     readFileSync("supabase/migrations/202610300001_initial.sql", "utf8"),
   );
+  await db.exec(
+    readFileSync("supabase/migrations/202610300002_nanogpt_models.sql", "utf8"),
+  );
+  await db.exec("set search_path=forma,public");
   await db.query("insert into auth.users values($1,$2),($3,$4)", [
     a,
     "a@example.com",
     b,
     "b@example.com",
   ]);
+  await asUser(a, "select ensure_workspace()");
+  await asUser(b, "select ensure_workspace()");
+  await asUser(a, "select ensure_workspace()");
   preset = (
-    await asUser<{ id: string }>(a, "select id from public.presets limit 1")
+    await asUser<{ id: string }>(a, "select id from forma.presets limit 1")
   ).rows[0].id;
   cid = (
     await asUser<{ id: string }>(
       a,
-      "insert into public.conversations(user_id,title,model_id,preset_id) values($1,$2,$3,$4) returning id",
+      "insert into forma.conversations(user_id,title,model_id,preset_id) values($1,$2,$3,$4) returning id",
       [a, "Private A", model, preset],
     )
   ).rows[0].id;
 }, 60000);
 afterAll(() => db.close());
 describe.sequential("Migración PostgreSQL real y aislamiento RLS", () => {
+  it("conserva permisos de tablas de otras aplicaciones", async () => {
+    const result = await db.query<{ allowed: boolean }>(
+      "select has_table_privilege('anon','public.other_app_records','select') as allowed",
+    );
+    expect(result.rows[0].allowed).toBe(true);
+    expect((await db.query("select id from public.profiles")).rows).toEqual([
+      { id: 123 },
+    ]);
+  });
+  it("SQL aislado crea solo una tabla sin cambiar triggers de Auth", async () => {
+    const before = await db.query<{ name: string }>(
+      "select tablename as name from pg_tables where schemaname='public' order by tablename",
+    );
+    const triggers = await db.query(
+      "select oid from pg_trigger where tgrelid='auth.users'::regclass and not tgisinternal order by oid",
+    );
+    await db.exec(
+      readFileSync("supabase/manual/create_connection_check.sql", "utf8"),
+    );
+    const after = await db.query<{ name: string }>(
+      "select tablename as name from pg_tables where schemaname='public' order by tablename",
+    );
+    expect(
+      after.rows.filter(
+        (row) => !before.rows.some((old) => old.name === row.name),
+      ),
+    ).toEqual([{ name: "forma_connection_checks" }]);
+    expect(
+      (
+        await db.query(
+          "select oid from pg_trigger where tgrelid='auth.users'::regclass and not tgisinternal order by oid",
+        )
+      ).rows,
+    ).toEqual(triggers.rows);
+  });
+  it("tabla aislada permite comprobar conexión sin exponer filas ajenas", async () => {
+    const id = (
+      await asUser<{ id: string }>(
+        a,
+        "insert into forma_connection_checks default values returning id",
+      )
+    ).rows[0].id;
+    expect(
+      (await asUser(a, "select * from forma_connection_checks")).rows,
+    ).toHaveLength(1);
+    expect(
+      (await asUser(b, "select * from forma_connection_checks")).rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await asUser(
+          b,
+          "delete from forma_connection_checks where id=$1 returning id",
+          [id],
+        )
+      ).rows,
+    ).toHaveLength(0);
+    await expect(
+      asUser(b, "insert into forma_connection_checks(user_id) values($1)", [a]),
+    ).rejects.toThrow(/row-level security/);
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.exec("set local role anon");
+        return tx.query("select * from forma_connection_checks");
+      }),
+    ).rejects.toThrow(/permission denied/);
+    await asUser(a, "delete from forma_connection_checks where id=$1", [id]);
+    expect(
+      (await asUser(a, "select * from forma_connection_checks")).rows,
+    ).toHaveLength(0);
+  });
   it("crea perfil, límites y tres presets por usuario", async () => {
     expect((await asUser(a, "select * from profiles")).rows).toHaveLength(1);
     expect((await asUser(a, "select * from presets")).rows).toHaveLength(3);

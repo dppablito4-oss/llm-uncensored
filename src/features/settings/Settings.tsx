@@ -5,6 +5,8 @@ import { change, list, remove } from "../../services/data";
 import { useUI } from "../../stores/ui";
 import { download } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
+import { ModelInfo } from "../../components/ModelInfo";
+import { modelPrice } from "../../../shared/models";
 import type { Profile, Preset, Model, Usage, Conversation } from "../../types";
 export function Settings() {
   const { data: profiles = [], error } = useData<Profile>("profiles");
@@ -84,7 +86,7 @@ export function Settings() {
               >
                 {models.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name}
+                    {m.name} · {modelPrice(m.id)}
                   </option>
                 ))}
               </select>
@@ -160,6 +162,7 @@ export function Settings() {
               </label>
             ))}
           </div>
+          <ModelInfo id={profile.default_model} />
           <p className="muted">
             Los parámetros del preset tienen prioridad. El contexto usa un
             cálculo conservador por bytes UTF-8, con hasta 60 mensajes
@@ -195,7 +198,7 @@ export function Settings() {
         <p className="muted">
           Las respuestas sin uso reportado se estiman por bytes. Si no hay costo
           disponible, se omite de la suma. La factura real se consulta en
-          OpenRouter.
+          NanoGPT.
         </p>
       </article>
       <article className="settings-card">

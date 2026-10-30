@@ -7,6 +7,7 @@ import {
 } from "../../../shared/context.ts";
 import { encodeEvent } from "../../../shared/sse.ts";
 import { providerEvents } from "../../../shared/provider.ts";
+import { findModel } from "../../../shared/models.ts";
 
 const messages: Record<string, string> = {
   RATE_LIMIT: "Demasiadas solicitudes. Espera un minuto.",
@@ -14,10 +15,10 @@ const messages: Record<string, string> = {
   TOKEN_LIMIT: "No queda suficiente presupuesto diario de tokens.",
   MODEL_NOT_ALLOWED: "Este modelo no está autorizado.",
   MODEL_UNAVAILABLE:
-    "El modelo no está disponible en OpenRouter. Selecciona otro modelo autorizado.",
+    "El modelo no está disponible en NanoGPT. Selecciona otro modelo autorizado.",
   PROVIDER_BALANCE: "El proveedor no tiene saldo disponible.",
   PROVIDER_RATE_LIMIT:
-    "OpenRouter está limitando las solicitudes. Intenta más tarde.",
+    "NanoGPT está limitando las solicitudes. Intenta más tarde.",
   DUPLICATE_REQUEST: "La solicitud ya fue procesada. Actualiza el historial.",
   GENERATION_RUNNING: "Esta conversación ya tiene una generación activa.",
   NOT_FOUND: "Conversación no encontrada.",
@@ -37,7 +38,7 @@ export async function handler(
     if (!value) throw new Error("Missing backend configuration: " + name);
     return value;
   };
-  const origins = (env("ALLOWED_ORIGINS") || "")
+  const origins = (env("FORMA_ALLOWED_ORIGINS") || "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
@@ -65,6 +66,7 @@ export async function handler(
       required("SUPABASE_URL"),
       required("SUPABASE_ANON_KEY"),
       {
+        db: { schema: "forma" },
         global: { headers: { Authorization: authorization } },
         auth: { persistSession: false },
       },
@@ -109,7 +111,7 @@ export async function handler(
     const admin = createClient(
       required("SUPABASE_URL"),
       required("SUPABASE_SERVICE_ROLE_KEY"),
-      { auth: { persistSession: false } },
+      { db: { schema: "forma" }, auth: { persistSession: false } },
     );
     const [{ data: profile }, { data: allowed }, { data: conv }] =
       await Promise.all([
@@ -133,10 +135,20 @@ export async function handler(
       ? await db.from("presets").select("*").eq("id", input.preset_id).single()
       : { data: null, error: null };
     if (presetError) return json("Preset no encontrado", 404);
-    const maxTokens = Math.min(preset?.max_tokens ?? profile.max_tokens, 8192);
-    const contextBudget = Math.min(profile.context_tokens, 24000),
+    const model = findModel(input.model_id);
+    if (!model) return json(messages.MODEL_NOT_ALLOWED, 400);
+    const maxTokens = Math.min(
+      preset?.max_tokens ?? profile.max_tokens,
+      model.max_output_tokens ?? 8192,
+      8192,
+    );
+    const contextBudget = Math.min(
+        profile.context_tokens,
+        24000,
+        (model.context_length ?? 24000) - maxTokens,
+      ),
       memoryBudget = Math.min(profile.memory_tokens, 4000);
-    const key = required("OPENROUTER_API_KEY");
+    const key = required("LLM_UNC_API_KEY");
     const { data: event, error: reserveError } = await admin.rpc(
       "begin_generation",
       {
@@ -228,14 +240,13 @@ export async function handler(
             0,
           );
           const response = await fetch(
-            "https://openrouter.ai/api/v1/chat/completions",
+            "https://nano-gpt.com/api/v1/chat/completions",
             {
               method: "POST",
               signal: controller.signal,
               headers: {
                 Authorization: `Bearer ${key}`,
                 "Content-Type": "application/json",
-                "X-OpenRouter-Title": "Forma AI",
               },
               body: JSON.stringify({
                 model: input.model_id,

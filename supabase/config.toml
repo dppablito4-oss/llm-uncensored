@@ -2,10 +2,10 @@ project_id = "llm-uncensored"
 [api]
 enabled = true
 port = 54321
-schemas = ["public", "graphql_public"]
+schemas = ["public", "graphql_public", "forma"]
 [db]
 port = 54322
-major_version = 15
+major_version = 17
 [auth]
 enabled = true
 site_url = "http://localhost:5173/llm-uncensored/"

@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { handler } from "../supabase/functions/chat-stream/handler";
+import { defaultModel } from "../shared/models";
 const uid = "11111111-1111-4111-8111-111111111111",
   cid = "22222222-2222-4222-8222-222222222222",
   eid = "33333333-3333-4333-8333-333333333333";
@@ -8,8 +9,8 @@ const env = (name: string) =>
     SUPABASE_URL: "https://backend.test",
     SUPABASE_ANON_KEY: "public-key",
     SUPABASE_SERVICE_ROLE_KEY: "PRIVATE_SERVICE_SECRET",
-    OPENROUTER_API_KEY: "PRIVATE_OPENROUTER_SECRET",
-    ALLOWED_ORIGINS: "https://allowed.test",
+    LLM_UNC_API_KEY: "PRIVATE_NANOGPT_SECRET",
+    FORMA_ALLOWED_ORIGINS: "https://allowed.test",
   })[name];
 let providerStatus = 200,
   authenticated = true,
@@ -38,7 +39,7 @@ const input = () => ({
   conversation_id: cid,
   request_id: crypto.randomUUID(),
   content: "hola",
-  model_id: "allowed-model",
+  model_id: defaultModel,
 });
 beforeEach(() => {
   providerStatus = 200;
@@ -65,7 +66,7 @@ beforeEach(() => {
           temperature: 0.7,
           top_p: 1,
         });
-      if (u.includes("/rest/v1/models")) return json({ id: "allowed-model" });
+      if (u.includes("/rest/v1/models")) return json({ id: defaultModel });
       if (u.includes("/rest/v1/conversations"))
         return json(owner ? { id: cid } : null);
       if (u.includes("/rest/v1/memories"))
@@ -82,11 +83,14 @@ beforeEach(() => {
         finish = JSON.parse(String(init?.body));
         return json(null);
       }
-      if (u === "https://openrouter.ai/api/v1/chat/completions") {
+      if (u === "https://nano-gpt.com/api/v1/chat/completions") {
+        expect(new Headers(init?.headers).get("Authorization")).toBe(
+          "Bearer PRIVATE_NANOGPT_SECRET",
+        );
         providerBody = JSON.parse(String(init?.body));
         if (providerStatus !== 200)
           return json(
-            { error: { message: "PRIVATE_OPENROUTER_SECRET provider debug" } },
+            { error: { message: "PRIVATE_NANOGPT_SECRET provider debug" } },
             providerStatus,
           );
         return new Response(
@@ -114,7 +118,7 @@ describe("Edge handler con proveedor simulado y SDK Supabase real", () => {
       p_output: 2,
     });
     expect(providerBody).toMatchObject({
-      model: "allowed-model",
+      model: defaultModel,
       stream: true,
     });
     expect(JSON.stringify(providerBody)).toContain(

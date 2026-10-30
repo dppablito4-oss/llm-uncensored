@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { HashRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "../src/app/App";
+import { defaultModel, modelCatalog, modelPrice } from "../shared/models";
 const mock = vi.hoisted(() => {
   const tables: Record<string, Record<string, unknown>[]> = {};
   let session: unknown = null;
@@ -34,6 +35,7 @@ const mock = vi.hoisted(() => {
 vi.mock("../src/lib/supabase", () => ({
   configured: true,
   supabase: {
+    rpc: async () => ({ error: null }),
     auth: {
       getSession: async () => ({ data: { session: mock.getSession() } }),
       onAuthStateChange: (callback: (e: string, s: unknown) => void) => {
@@ -107,11 +109,11 @@ beforeEach(() => {
   mock.sent = [];
   window.location.hash = "/chat";
   for (const key of Object.keys(mock.tables)) delete mock.tables[key];
-  mock.tables.models = [{ id: "model", name: "Dolphin test" }];
+  mock.tables.models = modelCatalog.slice(0, 2);
   mock.tables.profiles = [
     {
       id: "u1",
-      default_model: "model",
+      default_model: defaultModel,
       default_preset_id: null,
       memory_enabled: true,
     },
@@ -167,6 +169,32 @@ function mount() {
   return client;
 }
 describe("Flujo UI completo con proveedor simulado", () => {
+  it("permite cambiar de modelo y muestra su tarifa antes de enviarlo", async () => {
+    const user = userEvent.setup();
+    mock.setSession({
+      access_token: "user-token",
+      user: { id: "u1", email: "test@example.com" },
+    });
+    mount();
+    const selector = await screen.findByRole("combobox", { name: "Modelo" });
+    const alternate = modelCatalog[1];
+    await waitFor(() =>
+      expect(
+        Array.from(
+          (selector as HTMLSelectElement).options,
+          (option) => option.value,
+        ),
+      ).toContain(alternate.id),
+    );
+    await user.selectOptions(selector, alternate.id);
+    expect((selector as HTMLSelectElement).value).toBe(alternate.id);
+    expect(
+      document.querySelector(".model-info summary")?.textContent,
+    ).toContain(modelPrice(alternate.id));
+    await user.type(screen.getByRole("textbox", { name: "Mensaje" }), "Hola");
+    await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
+    await waitFor(() => expect(mock.sent[0]?.model_id).toBe(alternate.id));
+  });
   it("protege rutas, inicia sesión, envía, muestra SSE y recupera conversación", async () => {
     const user = userEvent.setup();
     mount();
@@ -185,18 +213,27 @@ describe("Flujo UI completo con proveedor simulado", () => {
       "Hola mundo",
     );
     await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
-    await screen.findByText("Hola desde el proveedor simulado");
+    // Streaming completion navigates and reloads history asynchronously.
+    await screen.findByText(
+      "Hola desde el proveedor simulado",
+      {},
+      { timeout: 5000 },
+    );
     expect(mock.sent).toHaveLength(1);
     expect(mock.sent[0]).toMatchObject({
       content: "Hola mundo",
-      model_id: "model",
+      model_id: defaultModel,
     });
     expect(mock.sent[0]).not.toHaveProperty("messages");
     expect(mock.tables.conversations).toHaveLength(1);
     await user.click(screen.getByRole("link", { name: /Nueva conversación/ }));
     await screen.findByRole("heading", { name: /¿Qué tienes/ });
     await user.click(screen.getByRole("link", { name: "Hola mundo" }));
-    await screen.findByText("Hola desde el proveedor simulado");
+    await screen.findByText(
+      "Hola desde el proveedor simulado",
+      {},
+      { timeout: 5000 },
+    );
   });
   it("registra y pide revisar correo", async () => {
     const user = userEvent.setup();

@@ -8,6 +8,7 @@ for (const file of files) {
   const source = readFileSync("dist/assets/" + file, "utf8");
   for (const forbidden of [
     "OPENROUTER_API_KEY",
+    "LLM_UNC_API_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
     "PRIVATE_OPENROUTER_SECRET",
     "PRIVATE_SERVICE_SECRET",

@@ -16,6 +16,9 @@ import { download } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
 import { Modal } from "../../components/ui/dialog";
 import type { Preset, Model } from "../../types";
+import { ModelInfo } from "../../components/ModelInfo";
+import { defaultModel, modelPrice } from "../../../shared/models";
+import { useWatch } from "react-hook-form";
 export const presetSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().max(400),
@@ -30,7 +33,7 @@ const initial = {
   name: "",
   description: "",
   system_prompt: "",
-  model_id: "cognitivecomputations/dolphin-mistral-24b-venice-edition",
+  model_id: defaultModel,
   temperature: 0.7,
   top_p: 1,
   max_tokens: 2048,
@@ -46,11 +49,13 @@ export function Presets() {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<z.infer<typeof presetSchema>>({
     resolver: zodResolver(presetSchema),
     defaultValues: initial,
   });
+  const selectedModel = useWatch({ control, name: "model_id" });
   function edit(p: Preset | null) {
     setEditing(p);
     reset(p || initial);
@@ -201,11 +206,14 @@ export function Presets() {
             <select {...register("model_id")}>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}
+                  {m.name} · {modelPrice(m.id)}
                 </option>
               ))}
             </select>
           </label>
+          <div className="wide">
+            <ModelInfo id={selectedModel} />
+          </div>
           <label>
             Temperatura
             <input

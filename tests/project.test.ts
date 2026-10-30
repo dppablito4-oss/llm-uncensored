@@ -20,7 +20,7 @@ describe("Límites de despliegue y secretos", () => {
       if (file.endsWith(".d.ts")) continue;
       const text = readFileSync(file, "utf8");
       expect(text).not.toMatch(
-        /OPENROUTER_API_KEY|SUPABASE_SERVICE_ROLE_KEY|service_role|sk-or-v1-/,
+        /LLM_UNC_API_KEY|OPENROUTER_API_KEY|SUPABASE_SERVICE_ROLE_KEY|service_role|sk-or-v1-/,
       );
     }
   });

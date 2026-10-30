@@ -23,6 +23,8 @@ import { streamChat } from "../../services/chat";
 import { download } from "../../lib/utils";
 import { useData } from "../../hooks/useData";
 import { Button } from "../../components/ui/button";
+import { ModelInfo } from "../../components/ModelInfo";
+import { modelPrice } from "../../../shared/models";
 import type {
   Conversation,
   Message,
@@ -243,7 +245,7 @@ ${m.content}`,
             {models.length ? (
               models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}
+                  {m.name} · {modelPrice(m.id)}
                 </option>
               ))
             ) : (
@@ -277,6 +279,7 @@ ${m.content}`,
           )}
         </div>
       </header>
+      <ModelInfo id={selectedModel} />
       <div
         className="chat-scroll"
         ref={scroll}

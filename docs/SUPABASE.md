@@ -1,89 +1,48 @@
-# Configurar Supabase
+﻿# Supabase: backend aislado de Forma
 
-## Proyecto y esquema
+Proyecto conectado: `goegjuglstapjwcckawp`. Las ocho tablas `models`, `profiles`, `presets`, `conversations`, `messages`, `memories`, `usage_events` y `user_limits` viven en el esquema **forma**. Se conservan las tablas ajenas de `public` y la tabla inicial `public.forma_connection_checks`.
 
-Crea un proyecto Supabase nuevo y conserva su Project Ref. No uses una base con datos ajenos para experimentar. Desde la raíz:
+Frontend y Edge usan `db.schema = forma`. Al iniciar sesión, `forma.ensure_workspace()` crea de forma idempotente el perfil, las cuotas y tres presets del usuario autenticado. No se agrega un trigger de registro a `auth.users`: los usuarios de la otra aplicación no reciben perfiles Forma automáticamente.
+
+## Instalación en otro proyecto
 
 ```bash
+npm ci
 npx supabase login
 npx supabase link --project-ref TU_PROJECT_REF
-npx supabase db push
+node scripts/install-forma.mjs TU_PROJECT_REF
 ```
 
-La migración crea `profiles`, `conversations`, `messages`, `presets`, `memories`, `usage_events`, `models` y `user_limits`, con UUID, índices, triggers y RLS. Los perfiles/presets iniciales se crean para usuarios nuevos mediante el trigger de Auth. Regístrate después de aplicar la migración.
+El instalador comprueba el proyecto vinculado y ejecuta ambos SQL en una transacción. Falla si `forma` ya existe. No borra ni reinstala datos. En el proyecto compartido no uses `db push`, `db reset` ni `migration repair`: conserva el historial de la otra aplicación.
 
-## Auth por correo
-
-En Authentication → URL Configuration configura:
-
-- Site URL: `https://TU_USUARIO.github.io/llm-uncensored/`.
-- Redirect URLs: esa misma URL y `http://localhost:5173/llm-uncensored/`.
-- Proveedor email habilitado y confirmación por email activada.
-- SMTP propio si vas a admitir usuarios externos; revisa las restricciones y cuotas del servicio de correo del proyecto.
-
-La app utiliza PKCE y `detectSessionInUrl`; permite que Supabase consuma `?code=...` antes de limpiar la URL. HashRouter mantiene las rutas del cliente detrás de `#` sin necesitar rewrites del servidor de Pages. Los enlaces PKCE deben abrirse en el navegador/dispositivo donde se inició el proceso.
-
-La recuperación muestra un formulario de nueva contraseña cuando Auth emite `PASSWORD_RECOVERY`. No pidas ni guardes contraseñas en las tablas públicas.
-
-## Claves y orígenes
-
-Copia Project URL y la clave publishable a `.env` (las dos únicas variables VITE). Estas claves públicas no conceden acceso a datos de otros usuarios: eso depende de RLS.
-
-Configura `OPENROUTER_API_KEY` y `ALLOWED_ORIGINS` en los secretos de Edge Functions mediante el dashboard. Ejemplo del valor de orígenes:
-
-```text
-http://localhost:5173,https://TU_USUARIO.github.io
-```
-
-Son orígenes exactos sin ruta ni barra final. Nunca uses `*`. Si usas otro dominio, puerto o preview, añádelo expresamente. No envíes claves privadas al navegador. Las variables reservadas `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` las proporciona el runtime de Supabase; no se agregan al `.env` frontend.
-
-## Función
-
-```bash
-npx supabase functions deploy chat-stream
-```
-
-`supabase/config.toml` mantiene `verify_jwt = true`. Además, el handler consulta Auth con el JWT del usuario. La cabecera `Authorization` debe contener el access token de sesión del usuario; la publishable key se envía en `apikey`, nunca como sustituto del JWT.
-
-Si recibes 401: revisa el proyecto de las claves, la sesión, su caducidad, el despliegue correcto y la compatibilidad de las signing keys con el gateway de tu proyecto. No despliegues con `--no-verify-jwt` para ocultar el problema. Actualiza la CLI/runtime siguiendo la documentación del proveedor cuando corresponda.
-
-## Cuotas y modelos autorizados (solo administrador)
-
-Ejecuta SQL en el dashboard, sustituyendo un UUID real:
+Expón `forma` en la Data API conservando todos los esquemas existentes. En este proyecto se verificó la lista anterior `public,graphql_public` y se amplió mediante configuración PostgreSQL:
 
 ```sql
-update public.user_limits
-set requests_per_minute = 8, daily_requests = 80, daily_tokens = 250000
-where user_id = 'UUID_DEL_USUARIO';
+alter role authenticator set pgrst.db_schemas='public,graphql_public,forma';
+notify pgrst, 'reload config';
+notify pgrst, 'reload schema';
 ```
 
-El usuario puede leer su cuota, pero no modificarla. Los límites usan eventos de uso que permanecen aunque borres la conversación.
+En otro proyecto lee primero la lista expuesta. Este ajuste por rol puede prevalecer sobre la lista del dashboard; mantenlo actualizado al añadir esquemas.
 
-Para admitir otro modelo, confirma primero el ID en OpenRouter y añade una fila al catálogo backend:
+## Variables y despliegue
 
-```sql
-insert into public.models(id,name,enabled)
-values ('ID_VALIDO_DE_OPENROUTER','Nombre visible',true);
-```
+`.env.local`, excluido de Git, solo contiene `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`. Esta app usa Vite, no variables `NEXT_PUBLIC_*`. La clave publishable está sujeta a permisos y RLS.
 
-La interfaz lo recupera del backend. Para retirarlo: `update public.models set enabled=false where id='ID';`. No se permite cambiar modelos del catálogo desde el cliente. Un modelo autorizado puede dejar de estar disponible en el proveedor; la función devuelve un error claro ante HTTP 404 y no inventa una respuesta.
-
-## Verificaciones después de conectar
-
-1. Crear dos cuentas A/B y confirmar sus correos.
-2. A crea conversación, preset y memoria. B no debe poder verlos ni modificarlos desde la API.
-3. Enviar un mensaje, ver fragmentos progresivos, recargar y comprobar que persiste.
-4. Detener una respuesta larga y actualizar historial para comprobar el estado parcial.
-5. Cambiar cuotas mediante SQL y comprobar HTTP 429.
-6. Inspeccionar Network: la clave OpenRouter nunca debe aparecer en solicitudes del navegador.
-7. Probar recuperación de contraseña con el correo real y acceso desde Android.
-
-Pruebas locales completas de Supabase requieren Docker y la CLI:
+Secretos Edge: `LLM_UNC_API_KEY` y `FORMA_ALLOWED_ORIGINS`. Los orígenes son exactos, separados por comas, sin rutas ni barra final. Se configuraron `http://localhost:5173`, `http://127.0.0.1:5173` y `https://dppablito4-oss.github.io`. El nombre específico de CORS evita modificar otras funciones.
 
 ```bash
-npx supabase start
-npx supabase db reset
-npx supabase test db
+npx supabase functions deploy chat-stream --project-ref TU_PROJECT_REF
 ```
 
-La suite `npm test` no requiere Docker: ejecuta la migración SQL en PostgreSQL PGlite con un Auth mínimo de prueba y comprueba RLS, CRUD, cuotas y transacciones privilegiadas.
+Se conserva `verify_jwt = true` y la función además verifica el token contra Auth. Las variables reservadas `SUPABASE_*` las proporciona el runtime. Las claves privadas nunca se envían al navegador. Ver [NANOGPT.md](NANOGPT.md).
+
+## Auth y verificación
+
+Añade las redirecciones de esta app a Auth conservando las anteriores. No sustituyas la Site URL de la otra aplicación sin revisar el impacto. PKCE requiere abrir los enlaces en el navegador donde se inició la solicitud. Login y bootstrap fueron probados en producción; los correos reales quedan pendientes.
+
+Solo el administrador modifica cuotas en `forma.user_limits` o habilita modelos en `forma.models`.
+
+`npm run check:supabase` es de solo lectura. La prueba explícita `node --env-file=.env.local scripts/smoke-hosted.mjs TU_PROJECT_REF` crea dos cuentas temporales, comprueba RLS y ejecuta una generación corta facturada; elimina las cuentas en `finally`. Las claves administrativas de la CLI permanecen en memoria.
+
+La suite local usa PostgreSQL PGlite y prueba también que se conserva una tabla ajena `public.profiles`. pgTAP con Supabase local requiere Docker.

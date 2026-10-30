@@ -6,6 +6,7 @@ export const supabase = createClient(
   url || "https://unconfigured.supabase.co",
   key || "unconfigured",
   {
+    db: { schema: "forma" },
     auth: {
       persistSession: true,
       autoRefreshToken: true,

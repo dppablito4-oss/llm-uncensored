@@ -243,6 +243,8 @@ export function App() {
     client = useQueryClient();
   const [session, setSession] = useState<Session | null>(null),
     [loading, setLoading] = useState(true),
+    [readyUser, setReadyUser] = useState<string | null>(null),
+    [setupError, setSetupError] = useState(""),
     [recovery, setRecovery] = useState(false);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -260,6 +262,24 @@ export function App() {
     });
     return () => data.subscription.unsubscribe();
   }, [client]);
+  useEffect(() => {
+    let active = true;
+    if (!session) return;
+    void supabase.rpc("ensure_workspace").then(({ error }) => {
+      if (!active) return;
+      if (error)
+        setSetupError(
+          "No se pudo preparar tu espacio. Recarga para reintentar.",
+        );
+      else {
+        setSetupError("");
+        setReadyUser(session.user.id);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [session]);
   if (!configured)
     return (
       <div className="setup">
@@ -280,7 +300,7 @@ export function App() {
           <li>
             Aplica las migraciones y despliega <code>chat-stream</code>.
           </li>
-          <li>Guarda la clave de OpenRouter como secreto del backend.</li>
+          <li>Guarda la clave de NanoGPT como secreto del backend.</li>
         </ol>
         <p className="muted">
           Consulta README.md para los pasos completos. No se simulan respuestas
@@ -289,6 +309,12 @@ export function App() {
       </div>
     );
   if (loading) return <div className="loading">Cargando tu espacio…</div>;
+  if (session && readyUser !== session.user.id && !recovery)
+    return (
+      <div className="loading" role={setupError ? "alert" : "status"}>
+        {setupError || "Preparando tu espacio…"}
+      </div>
+    );
   return session && !recovery ? (
     <Workspace key={session.user.id} session={session} />
   ) : (

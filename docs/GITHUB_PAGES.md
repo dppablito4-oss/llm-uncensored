@@ -17,7 +17,7 @@ En Settings → Secrets and variables → Actions → Variables crea:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-No configures `OPENROUTER_API_KEY` aquí; solo pertenece al backend Supabase. Las variables VITE son públicas y quedan compiladas en JavaScript.
+No configures `LLM_UNC_API_KEY` aquí; solo pertenece al backend Supabase. Las variables VITE son públicas y quedan compiladas en JavaScript.
 
 En Settings → Pages selecciona **GitHub Actions** como fuente. Ejecuta el workflow “Validate and deploy Pages” o haz push a `main`. Se necesita la política de permisos de Actions que permita Pages y OIDC. Las PR ejecutan validación/compilación pero no publican.
 
@@ -28,7 +28,7 @@ El workflow valida, prueba y compila aunque falten variables públicas. En ese c
 ## Verificar después del despliegue
 
 - Comprueba la URL retornada por Actions y que los assets no respondan 404.
-- Añade el origen exacto de Pages a `ALLOWED_ORIGINS` de Supabase.
+- Añade el origen exacto de Pages a `FORMA_ALLOWED_ORIGINS` de Supabase.
 - Configura Site URL/Redirect URLs de Auth incluyendo `/llm-uncensored/`.
 - Registra una cuenta, confirma correo, inicia sesión y prueba un stream real.
 - Abre el historial en una segunda sesión y confirma persistencia.
