@@ -1,12 +1,22 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
+import viteConfig from "../vite.config";
 function files(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? files(resolve(dir, e.name)) : [resolve(dir, e.name)],
   );
 }
 describe("Límites de despliegue y secretos", () => {
+  it("publica el dominio personalizado desde la raíz y conserva CNAME", () => {
+    expect(readFileSync("CNAME", "utf8").trim()).toBe("chat.sypablitodp.site");
+    expect(viteConfig.base).toBe("/");
+    expect(viteConfig.plugins?.flat()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "pages-custom-domain" }),
+      ]),
+    );
+  });
   it("solo expone dos variables públicas", () => {
     expect(
       readFileSync(".env.example", "utf8")

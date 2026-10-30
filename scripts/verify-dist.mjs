@@ -1,7 +1,28 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import assert from "node:assert/strict";
 const html = readFileSync("dist/index.html", "utf8");
-assert.match(html, /\/llm-uncensored\/assets\//, "Pages base path missing");
+const domain = existsSync("CNAME") ? readFileSync("CNAME", "utf8").trim() : "";
+const base = domain ? "/" : "/llm-uncensored/";
+const assetPaths = [
+  ...html.matchAll(/(?:src|href)="([^"\s]*\/assets\/[^"\s]+)"/g),
+].map((match) => match[1]);
+assert(assetPaths.length > 0, "No compiled assets in HTML");
+for (const path of assetPaths) {
+  assert(
+    path.startsWith(base + "assets/"),
+    "Asset uses wrong deployment base: " + path,
+  );
+  assert(
+    existsSync("dist/" + path.slice(base.length)),
+    "Missing compiled asset: " + path,
+  );
+}
+if (domain)
+  assert.equal(
+    readFileSync("dist/CNAME", "utf8").trim(),
+    domain,
+    "Custom domain not included in deployment",
+  );
 const files = readdirSync("dist/assets").filter((f) => f.endsWith(".js"));
 assert(files.length > 0);
 for (const file of files) {

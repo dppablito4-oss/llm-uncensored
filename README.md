@@ -123,4 +123,4 @@ Fuentes técnicas: [Supabase Auth en Edge](https://supabase.com/docs/guides/func
 
 La sección **Imágenes** ofrece Animagine XL 4.0 y Moxie Diffusion XL, con tamaño, pasos, CFG, semilla opcional y precio antes de generar. Incluye galería privada y descarga. Ver [docs/IMAGES.md](docs/IMAGES.md).
 
-La app está publicada en [GitHub Pages](https://dppablito4-oss.github.io/llm-uncensored/). Los despliegues desde main se validan antes de publicar.
+La app está publicada en [GitHub Pages](https://chat.sypablitodp.site/). Los despliegues desde main se validan antes de publicar.

@@ -21,7 +21,7 @@ No configures `LLM_UNC_API_KEY` aquí; solo pertenece al backend Supabase. Las v
 
 En Settings → Pages selecciona **GitHub Actions** como fuente. Ejecuta el workflow “Validate and deploy Pages” o haz push a `main`. Se necesita la política de permisos de Actions que permita Pages y OIDC. Las PR ejecutan validación/compilación pero no publican.
 
-La URL esperada tiene la forma `https://TU_USUARIO.github.io/llm-uncensored/`. Vite ya configura `/llm-uncensored/`; HashRouter permite abrir rutas como `/#/chat/...` dentro de esa base sin 404 de servidor. Si cambias el nombre del repositorio o publicas en la raíz de un dominio propio, actualiza `base` en `vite.config.ts` y la comprobación de `scripts/verify-dist.mjs`.
+La URL esperada tiene la forma `https://TU_USUARIO.github.io/llm-uncensored/`. Con CNAME configurado, Vite publica desde `/` y copia CNAME al artefacto; sin dominio personalizado utiliza `/llm-uncensored/`. HashRouter permite abrir rutas como `/#/chat/...` dentro de esa base sin 404 de servidor. Si cambias el nombre del repositorio o publicas en la raíz de un dominio propio, actualiza `base` en `vite.config.ts` y la comprobación de `scripts/verify-dist.mjs`.
 
 El workflow valida, prueba y compila aunque falten variables públicas. En ese caso omite el job de despliegue y deja una nota en el resumen de Actions. Tras añadir ambas variables, vuelve a ejecutar el workflow. Una compilación sin ellas sigue siendo válida para revisar la pantalla de configuración, pero no se presenta como chat operativo.
 
@@ -34,3 +34,8 @@ El workflow valida, prueba y compila aunque falten variables públicas. En ese c
 - Abre el historial en una segunda sesión y confirma persistencia.
 
 El workflow se entrega preparado, pero su ejecución remota y publicación necesitan acceso al repositorio y tu configuración externa.
+
+
+## Dominio personalizado
+
+CNAME contiene `chat.sypablitodp.site`. El dominio apunta a GitHub Pages y usa HTTPS. La compilaci?n lee ese archivo, usa la ra?z para los assets y publica una copia en dist/CNAME. `verify:dist` comprueba el prefijo y la existencia de cada asset, adem?s de la coincidencia de CNAME.

@@ -4,7 +4,7 @@ Fecha: 30 de octubre de 2026, America/Lima.
 
 ## Publicaci?n
 
-App: https://dppablito4-oss.github.io/llm-uncensored/ (GitHub Pages, HTTPS).
+App: https://chat.sypablitodp.site/ (GitHub Pages, HTTPS).
 
 Se habilit? Pages con GitHub Actions y las dos variables p?blicas VITE. El primer despliegue del chat pas? en https://github.com/dppablito4-oss/llm-uncensored/actions/runs/41123836855. Las redirecciones de Pages y localhost se a?adieron a Auth conservando la Site URL y las redirecciones anteriores de la otra aplicaci?n. Las claves privadas permanecen en Supabase.
 
@@ -33,3 +33,8 @@ El selector de texto tiene 41 modelos con precios y par?metros publicados. Solo 
 Im?genes admite los dos modelos solicitados, una imagen por env?o, nueve tama?os, pasos/CFG/semilla, galer?a de 50 solicitudes recientes y descarga privada. Las cuotas se aplican en servidor. No incluye todav?a edici?n de imagen de referencia.
 
 Quedan pendientes correo real de confirmaci?n/recuperaci?n, prueba en Android y pgTAP con Docker. Las pruebas locales y las llamadas alojadas no sustituyen esas verificaciones.
+
+
+## Correcci?n de pantalla en blanco
+
+El dominio personalizado sirve desde la ra?z. Se corrigi? la base de Vite, antes /llm-uncensored/, que provocaba 404 en JavaScript/CSS. CNAME se incluye en el repositorio y en el artefacto de Pages. Se a?adi? una regresi?n del dominio y verificaci?n de archivos compilados. El dominio est? autorizado en CORS de ambas Edge Functions y en las redirecciones de Auth, conservando las direcciones anteriores. HTTPS est? habilitado en Pages.
