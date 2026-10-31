@@ -2,9 +2,10 @@ import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import {
   imageHandler,
   decodeImage,
+  providerImage,
 } from "../supabase/functions/image-generate/handler";
 import { imageRequest } from "../supabase/functions/image-generate/schema";
-import { imageModels, imagePrice } from "../shared/images";
+import { imageModels, imagePrice, qwenImageId } from "../shared/images";
 
 const uid = "11111111-1111-4111-8111-111111111111",
   id = "22222222-2222-4222-8222-222222222222";
@@ -18,7 +19,7 @@ const env = (name: string) =>
   })[name];
 const input = () => ({
   request_id: crypto.randomUUID(),
-  model_id: imageModels[0].id,
+  model_id: "nsfw-gen-illustrious",
   prompt: "An alpine lake",
   size: "1024x1024",
   steps: 12,
@@ -140,7 +141,7 @@ describe("Imagen NanoGPT, validación y frontera de secretos", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ id });
     expect(body).toMatchObject({
-      model: imageModels[0].id,
+      model: "nsfw-gen-illustrious",
       n: 1,
       response_format: "b64_json",
       num_inference_steps: 12,
@@ -178,12 +179,13 @@ describe("Imagen NanoGPT, validación y frontera de secretos", () => {
       error_code: "PROVIDER_402",
     });
   });
-  it("solo acepta los dos modelos, resoluciones y controles permitidos", () => {
+  it("solo acepta los modelos, resoluciones y controles permitidos", () => {
     expect(imageModels.map((model) => model.name)).toEqual([
+      "Qwen Image 3 Uncensored",
       "Animagine XL 4.0",
       "Moxie Diffusion XL",
     ]);
-    expect(imagePrice(imageModels[0].id, "512x512")).toBe(0.0034);
+    expect(imagePrice("nsfw-gen-illustrious", "512x512")).toBe(0.0034);
     for (const patch of [
       { model_id: "invented" },
       { size: "9999x9999" },
@@ -197,10 +199,81 @@ describe("Imagen NanoGPT, validación y frontera de secretos", () => {
         false,
       );
   });
+  it("envía a Qwen resolución y proporción sin controles de difusión", async () => {
+    const response = await imageHandler(
+      request({
+        request_id: crypto.randomUUID(),
+        model_id: qwenImageId,
+        prompt: "Una cámara roja sobre una mesa",
+        size: "2k",
+        aspect_ratio: "16:9",
+      }),
+      env,
+    );
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      model: qwenImageId,
+      size: "2k",
+      aspect_ratio: "16:9",
+      n: 1,
+    });
+    expect(body).not.toHaveProperty("num_inference_steps");
+    expect(body).not.toHaveProperty("guidance_scale");
+    expect(body).not.toHaveProperty("seed");
+  });
+  it("valida límites y parámetros específicos de Qwen", () => {
+    const qwen = {
+      request_id: crypto.randomUUID(),
+      model_id: qwenImageId,
+      prompt: "x".repeat(10000),
+      size: "1k",
+      aspect_ratio: "4:5",
+    };
+    expect(imageRequest.safeParse(qwen).success).toBe(true);
+    expect(imagePrice(qwenImageId, "2k")).toBe(0.04);
+    for (const patch of [
+      { size: "1024x1024" },
+      { aspect_ratio: "7:3" },
+      { steps: 12 },
+      { cfg_scale: 7.5 },
+      { seed: 42 },
+      { prompt: "x".repeat(10001) },
+    ])
+      expect(imageRequest.safeParse({ ...qwen, ...patch }).success).toBe(false);
+    expect(imageRequest.safeParse({ ...input(), size: "1k" }).success).toBe(
+      false,
+    );
+  });
   it("rechaza archivos que no sean PNG, JPEG o WebP", () => {
     expect(decodeImage(png).mime).toBe("image/png");
     expect(() => decodeImage(btoa("<script>alert(1)</script>"))).toThrow(
       "INVALID_IMAGE",
     );
+  });
+  it("descarga la imagen firmada devuelta por el proveedor sin enviar credenciales", async () => {
+    const download = vi.fn(
+      async () =>
+        new Response(Uint8Array.from(atob(png), (char) => char.charCodeAt(0))),
+    );
+    vi.stubGlobal("fetch", download);
+    const image = await providerImage({
+      url: "https://media.provider.test/image.png?signature=private",
+    });
+    expect(image.mime).toBe("image/png");
+    expect(download).toHaveBeenCalledWith(
+      "https://media.provider.test/image.png?signature=private",
+      expect.objectContaining({ redirect: "error" }),
+    );
+    expect(download.mock.calls[0]).toHaveLength(2);
+    await expect(
+      providerImage({ url: "http://media.provider.test/image.png" }),
+    ).rejects.toThrow("INVALID_IMAGE_URL");
+    await expect(
+      providerImage({ url: "https://127.0.0.1/image.png" }),
+    ).rejects.toThrow("INVALID_IMAGE_URL");
+    await expect(
+      providerImage({ url: "https://localhost/image.png" }),
+    ).rejects.toThrow("INVALID_IMAGE_URL");
+    expect(download).toHaveBeenCalledTimes(1);
   });
 });

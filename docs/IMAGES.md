@@ -4,12 +4,13 @@ La sección Imágenes usa NanoGPT con `LLM_UNC_API_KEY` desde la Edge Function `
 
 - Animagine XL 4.0: ID `nsfw-gen-illustrious`.
 - Moxie Diffusion XL: ID `hassaku-hentai`.
+- **Qwen Image 3 Uncensored** (predeterminado): ID `qwen-image-3-uncensored`.
 
-Los nombres e IDs se verificaron en el [catálogo oficial](https://nano-gpt.com/api/v1/images/models). La instantánea de precios y tamaños está en `shared/image-models.json`. Ambos cuestan USD 0.0034 por imagen de 512×512, USD 0.0051 a 1024×1024 y USD 0.0068 a 2048×2048 en la consulta del 30 de octubre de 2026. La interfaz muestra la tarifa de la resolución elegida. Se guarda el costo real reportado por el proveedor, o null si no lo reporta.
+Los nombres e IDs se verificaron en el [catálogo oficial](https://nano-gpt.com/api/v1/image-models). La instantánea está en `shared/image-models.json`. Animagine y Moxie cuestan USD 0.0034 por imagen de 512×512, USD 0.0051 a 1024×1024 y USD 0.0068 a 2048×2048. Qwen cuesta USD 0.04 tanto en 1K como en 2K. La interfaz muestra la tarifa antes de generar. Se guarda el costo real reportado por el proveedor, o null si no lo reporta. La denominación Uncensored es del proveedor y no garantiza la aceptación de cualquier petición.
 
 ## Interfaz y límites
 
-Texto a imagen, una imagen por solicitud, nueve resoluciones, 1–50 pasos, CFG 0–20 y semilla opcional entre 0 y 2147483647. Los valores iniciales son 1024×1024, 12 pasos y CFG 7.5. Una misma semilla no garantiza imágenes idénticas. No se implementa todavía edición de imágenes de referencia.
+Texto a imagen, una imagen por solicitud. Qwen admite 1K/2K y ocho proporciones: 1:1, 3:2, 16:9, 21:9, 9:16, 2:3, 3:4 y 4:5. Admite hasta 10.000 caracteres Unicode; el editor limita conservadoramente a 10.000 unidades UTF-16. No se envían pasos, CFG ni semilla a Qwen porque no publica esos controles. Los otros dos modelos mantienen nueve resoluciones, 1–50 pasos, CFG 0–20, hasta 3000 caracteres y semilla opcional entre 0 y 2147483647. Sus valores iniciales son 1024×1024, 12 pasos y CFG 7.5. Una misma semilla no garantiza imágenes idénticas. No se implementa edición con imágenes de referencia.
 
 La galería carga 24 solicitudes por página y permite cargar anteriores. La eliminación borra el archivo y reemplaza el prompt por `[Imagen eliminada]`; se conserva un registro oculto con modelo, parámetros y consumo, de modo que borrar una imagen no devuelve cuota ni permite eludir límites. Solo se eliminan generaciones terminadas o intentos de más de tres minutos. No se reintentan automáticamente solicitudes facturables. Si se interrumpe la conexión, actualiza la galería antes de generar de nuevo.
 
@@ -23,13 +24,14 @@ El backend acepta solo PNG, JPEG y WebP, hasta 20 MB. No devuelve claves ni cuer
 
 ## Instalación y pruebas
 
-Para este proyecto se aplicaron el esquema de imágenes y la migración `20261031004538_image_gallery_management.sql` sobre la instalación Forma existente y se desplegó `image-generate`. En una instalación nueva, `scripts/install-forma.mjs` incluye las seis migraciones dentro de su transacción. El proyecto alojado mantiene el historial de migraciones de la otra aplicación; no uses db reset ni migration repair.
+Para este proyecto se aplicaron el esquema de imágenes, la gestión de galería y `20261031021036_qwen_image_3.sql` sobre la instalación Forma existente y se desplegó `image-generate`. En una instalación nueva, `scripts/install-forma.mjs` incluye las siete migraciones dentro de su transacción. El proyecto alojado mantiene el historial de migraciones de la otra aplicación; no uses db reset ni migration repair.
 
 ```bash
 supabase functions deploy image-generate --project-ref TU_PROJECT_REF
 node --env-file=.env.local scripts/smoke-images.mjs TU_PROJECT_REF
+npm exec --package=supabase -- node scripts/smoke-images.mjs TU_PROJECT_REF --qwen
 ```
 
-La prueba explícita genera una imagen de paisaje con cada modelo, comprueba acceso firmado, RLS entre dos cuentas y elimina archivos/cuentas temporales. Cada modelo pasó con un costo reportado de USD 0.0034. Las pruebas locales cubren validación, reservas, cuotas, protección de secretos, almacenamiento privado y selección en la interfaz.
+La prueba original genera un paisaje con Animagine y Moxie; ambos pasaron con USD 0.0034 reportados. `--qwen` realiza una sola generación Qwen en 2K y 16:9, descarga una muestra a `test-results/` (ignorado por Git) para inspección visual, comprueba persistencia y aislamiento, y elimina los archivos/cuentas temporales del backend. Las claves administrativas no se guardan. Se necesita Node de `.nvmrc` y la CLI autenticada.
 
-API utilizada: [Image Generation OpenAI-Compatible](https://docs.nano-gpt.com/api-reference/endpoint/image-generation-openai), `POST https://nano-gpt.com/api/v1/images/generations`, respuesta b64_json y posterior guardado privado. Se soportan los campos size, num_inference_steps, guidance_scale y seed.
+Los tres modelos utilizan [Image Generation OpenAI-Compatible](https://docs.nano-gpt.com/api-reference/endpoint/image-generation-openai), `POST https://nano-gpt.com/api/v1/images/generations`. Se solicita base64; la ruta de Qwen devuelve una URL firmada en la práctica. El servidor admite ambos formatos y descarga las URLs del proveedor sin credenciales ni redirecciones, con límite de 20 MB y comprobación PNG/JPEG/WebP, antes de guardar en el bucket privado. Las URLs temporales del proveedor no se guardan ni se envían al navegador. Qwen envía size (1k/2k), aspect_ratio y output_format; los otros modelos envían size, num_inference_steps, guidance_scale y seed. Los parámetros y precios de Qwen se verifican en sus [metadatos de endpoint](https://nano-gpt.com/api/v1/images/models/qwen-image-3-uncensored/endpoints).

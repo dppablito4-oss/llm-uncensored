@@ -16,6 +16,7 @@ const sql =
     "supabase/migrations/20261031003417_chat_quota_accounting.sql",
     "supabase/migrations/20261031004538_image_gallery_management.sql",
     "supabase/migrations/20261031004954_chat_response_budget.sql",
+    "supabase/migrations/20261031021036_qwen_image_3.sql",
   ]
     .map((file) =>
       readFileSync(file, "utf8")

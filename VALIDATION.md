@@ -29,11 +29,21 @@ Scripts reproducibles: `scripts/smoke-chat-quota.mjs` y `scripts/smoke-gallery.m
 
 ## Validación local
 
-Con Node 22.23.4 pasan 75 pruebas en ocho archivos, ESLint, TypeScript, compilación, Deno para ambas funciones y `verify:dist`. La versión mínima está declarada en `engines` y la probada en `.nvmrc`.
+Con Node 22.23.4 pasan 80 pruebas en ocho archivos, ESLint, TypeScript, compilación, Deno para ambas funciones y `verify:dist`. La versión mínima está declarada en `engines` y la probada en `.nvmrc`.
 
 Las regresiones cubren doce turnos sin consumir reservas máximas permanentes, uso desconocido, idempotencia, funciones privilegiadas, memorias grandes, historial por pares, uso tras truncamiento, niveles de razonamiento, recuperación del editor tras un corte, paginación de mensajes y eliminación privada de imágenes.
 
 `npm audit --omit=dev` no reportó vulnerabilidades. La auditoría completa señaló avisos moderados en ESLint/minimatch; queda pendiente una actualización compatible, sin aplicar las degradaciones automáticas sugeridas por npm.
+
+## Qwen Image 3 Uncensored
+
+Se añadió `qwen-image-3-uncensored` como modelo predeterminado del estudio, conservando los dos modelos anteriores. La migración `20261031021036_qwen_image_3.sql` está aplicada y `image-generate` actualizado. Qwen admite 1K/2K, ocho proporciones y hasta 10.000 caracteres; pasos, CFG y semilla no se muestran ni se envían para este modelo. La galería conserva resolución y proporción. El precio de lista y el costo reportado en la prueba son USD 0,04 por imagen.
+
+La prueba alojada generó un gato naranja a la izquierda de una taza azul y una planta a la derecha en una cocina luminosa. Se descargó e inspeccionó el PNG de 2048×1152: sujetos definidos y composición coherente con la instrucción. Se comprobó persistencia, firma privada y rechazo entre usuarios; ambas cuentas temporales se eliminaron. La muestra local está en `test-results/qwen-image-3.png`, ignorada por Git.
+
+La adaptación necesitó seis solicitudes de prueba, USD 0,24 en total: cinco generaciones se facturaron pero falló su guardado al esperar base64 en lugar de una URL firmada; la última confirmó el flujo completo. El backend ahora descarga esa URL del proveedor sin enviarle claves ni seguir redirecciones, limita a 20 MB, verifica formato y guarda el archivo privado. No hay reintentos automáticos de generación. Los diagnósticos temporales de estructura se retiraron.
+
+Las regresiones nuevas validan parámetros propios de Qwen, cambio de modelo sin arrastrar resoluciones incompatibles, descarga de respuestas URL sin credenciales y reserva SQL con RLS. Advisors de seguridad, nivel error: sin hallazgos.
 
 ## Pendientes y límites
 

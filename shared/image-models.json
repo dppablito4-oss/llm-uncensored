@@ -3,6 +3,24 @@
   "fetched_at": "2026-10-30T20:32:07.797Z",
   "models": [
     {
+      "id": "qwen-image-3-uncensored",
+      "name": "Qwen Image 3 Uncensored",
+      "description": "Generación desde texto, con salida nativa en 1K o 2K y ocho proporciones. Publicado como Uncensored por NanoGPT. USD 0,04 por imagen en ambas resoluciones.",
+      "prices": { "1k": 0.04, "2k": 0.04 },
+      "resolutions": ["1k", "2k"],
+      "aspect_ratios": [
+        "1:1",
+        "3:2",
+        "16:9",
+        "21:9",
+        "9:16",
+        "2:3",
+        "3:4",
+        "4:5"
+      ],
+      "max_prompt_characters": 10000
+    },
+    {
       "id": "nsfw-gen-illustrious",
       "name": "Animagine XL 4.0",
       "description": "Animagine XL 4.0 - High-quality anime generation model with NSFW capabilities. CivitAI model 1188071@1408658.",

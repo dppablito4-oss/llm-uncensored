@@ -51,6 +51,9 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    readFileSync("supabase/migrations/20261031021036_qwen_image_3.sql", "utf8"),
+  );
   await db.exec("set search_path=forma,public");
   await db.query("insert into auth.users values($1,$2),($3,$4)", [
     a,
@@ -215,6 +218,49 @@ describe.sequential("Migración PostgreSQL real y aislamiento RLS", () => {
     await expect(
       db.query(sql, [b, "hassaku-hentai", "A tree", "512x512", 200, 7.5]),
     ).rejects.toThrow(/INVALID_PARAMETERS/);
+  });
+  it("reserva Qwen en 2K y proporción validada con aislamiento por usuario", async () => {
+    const sql =
+      "select begin_image_generation($1,gen_random_uuid(),'qwen-image-3-uncensored',$2,$3,$4,$5,$6,$7) as id";
+    for (const args of [
+      [b, "A cat", "1024x1024", null, null, null, "1:1"],
+      [b, "A cat", "2k", 12, 7.5, null, "1:1"],
+      [b, "A cat", "2k", null, null, null, "7:3"],
+      [b, "x".repeat(10001), "2k", null, null, null, "1:1"],
+    ])
+      await expect(db.query(sql, args)).rejects.toThrow(/INVALID_/);
+    const args = [b, "x".repeat(10000), "2k", null, null, null, "16:9"];
+    await expect(asUser(b, sql, args)).rejects.toThrow(/permission denied/);
+    const result = await db.query<{ id: string }>(sql, args),
+      id = result.rows[0].id;
+    const rows = (
+      await asUser<{
+        size: string;
+        aspect_ratio: string;
+        steps: null;
+        cfg_scale: null;
+        seed: null;
+      }>(
+        b,
+        "select size,aspect_ratio,steps,cfg_scale,seed from image_generations where id=$1",
+        [id],
+      )
+    ).rows;
+    expect(rows[0]).toEqual({
+      size: "2k",
+      aspect_ratio: "16:9",
+      steps: null,
+      cfg_scale: null,
+      seed: null,
+    });
+    expect(
+      (await asUser(a, "select id from image_generations where id=$1", [id]))
+        .rows,
+    ).toHaveLength(0);
+    await db.query(
+      "update image_generations set status='complete' where id=$1",
+      [id],
+    );
   });
   it("B no puede leer, editar ni eliminar conversación de A", async () => {
     expect(

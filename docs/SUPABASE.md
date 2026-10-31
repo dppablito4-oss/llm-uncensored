@@ -13,7 +13,7 @@ npx supabase link --project-ref TU_PROJECT_REF
 node scripts/install-forma.mjs TU_PROJECT_REF
 ```
 
-Además se agregó `forma.image_generations` y el bucket privado `forma-images`; consulta [IMAGES.md](IMAGES.md). El instalador comprueba el proyecto vinculado y ejecuta las seis migraciones SQL en una transacción. Falla si `forma` ya existe. No borra ni reinstala datos. En el proyecto compartido no uses `db push`, `db reset` ni `migration repair`: conserva el historial de la otra aplicación.
+Además se agregó `forma.image_generations` y el bucket privado `forma-images`; consulta [IMAGES.md](IMAGES.md). El instalador comprueba el proyecto vinculado y ejecuta las siete migraciones SQL en una transacción. Falla si `forma` ya existe. No borra ni reinstala datos. En el proyecto compartido no uses `db push`, `db reset` ni `migration repair`: conserva el historial de la otra aplicación.
 
 Expón `forma` en la Data API conservando todos los esquemas existentes. En este proyecto se verificó la lista anterior `public,graphql_public` y se amplió mediante configuración PostgreSQL:
 
@@ -52,6 +52,8 @@ La salida inicial subió de 2048 a 4096 tokens. Se actualizaron los perfiles que
 Los handlers registran fase, código e identificadores en logs estructurados; no registran prompts, respuestas, JWT ni claves. Las generaciones de chat obsoletas se cierran al iniciar otra solicitud, conservando su reserva desconocida. La galería deja de sondear indefinidamente los intentos antiguos y permite eliminarlos.
 
 ## Pruebas alojadas reproducibles
+
+Qwen Image 3 se añade mediante `20261031021036_qwen_image_3.sql`: amplía la lista de modelos, valida resolución/proporción y hasta 10.000 caracteres, y guarda pasos/CFG/semilla como null para Qwen. El parámetro opcional `p_aspect` de la función de reserva conserva las llamadas anteriores de los modelos existentes. Los permisos privilegiados y RLS se mantienen. No cambies las migraciones originales de instalaciones existentes.
 
 Con Node de `.nvmrc` y la CLI autenticada:
 

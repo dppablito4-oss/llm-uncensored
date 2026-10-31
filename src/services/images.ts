@@ -6,8 +6,9 @@ export type ImageGeneration = {
   model_id: string;
   prompt: string;
   size: string;
-  steps: number;
-  cfg_scale: number;
+  steps: number | null;
+  cfg_scale: number | null;
+  aspect_ratio: string;
   seed: number | null;
   status: "running" | "complete" | "error";
   object_path: string | null;
@@ -19,8 +20,9 @@ export type ImageInput = {
   model_id: string;
   prompt: string;
   size: string;
-  steps: number;
-  cfg_scale: number;
+  steps: number | null;
+  cfg_scale: number | null;
+  aspect_ratio?: string;
   seed: number | null;
 };
 export async function generateImage(input: ImageInput) {

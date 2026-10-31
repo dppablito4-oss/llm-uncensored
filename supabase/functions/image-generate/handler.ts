@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { imageRequest, deleteImageRequest } from "./schema.ts";
-import { imageBucket } from "../../../shared/images.ts";
+import { imageBucket, qwenImageId } from "../../../shared/images.ts";
 
 async function limitedBody(
   response: Response | Request,
@@ -34,6 +34,9 @@ async function limitedBody(
 export function decodeImage(encoded: string) {
   if (encoded.length > 28_000_000) throw new Error("IMAGE_LIMIT");
   const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+  return inspectImage(bytes);
+}
+function inspectImage(bytes: Uint8Array) {
   if (bytes.length > 20 * 1024 * 1024) throw new Error("IMAGE_LIMIT");
   const png = [137, 80, 78, 71, 13, 10, 26, 10].every(
     (value, i) => bytes[i] === value,
@@ -47,6 +50,38 @@ export function decodeImage(encoded: string) {
   )
     return { bytes, mime: "image/webp", extension: "webp" };
   throw new Error("INVALID_IMAGE");
+}
+
+export async function providerImage(
+  item: { b64_json?: unknown; url?: unknown } | undefined,
+) {
+  if (typeof item?.b64_json === "string") return decodeImage(item.b64_json);
+  if (typeof item?.url !== "string") throw new Error("MISSING_IMAGE");
+  // Some provider routes return a signed URL despite requesting base64. Only
+  // consume this field from the authenticated provider response, never input.
+  const url = new URL(item.url);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    !url.hostname.includes(".") ||
+    url.hostname.endsWith(".local") ||
+    url.hostname.endsWith(".localhost") ||
+    url.hostname.endsWith(".internal") ||
+    /^[\d.]+$/.test(url.hostname) ||
+    url.hostname.includes(":")
+  )
+    throw new Error("INVALID_IMAGE_URL");
+  const response = await fetch(url.href, {
+    redirect: "error",
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error("IMAGE_DOWNLOAD_ERROR");
+  }
+  return inspectImage(await limitedBody(response, 20 * 1024 * 1024));
 }
 
 export async function imageHandler(
@@ -99,7 +134,7 @@ export async function imageHandler(
     let rawBody;
     try {
       rawBody = JSON.parse(
-        new TextDecoder().decode(await limitedBody(req, 24000)),
+        new TextDecoder().decode(await limitedBody(req, 64000)),
       );
     } catch {
       return json({ error: "Solicitud inválida o demasiado grande" }, 400);
@@ -187,6 +222,7 @@ export async function imageHandler(
         p_steps: input.steps,
         p_cfg: input.cfg_scale,
         p_seed: input.seed,
+        p_aspect: input.aspect_ratio,
       },
     );
     if (reserveError) {
@@ -212,16 +248,28 @@ export async function imageHandler(
             Authorization: `Bearer ${key}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            model: input.model_id,
-            prompt: input.prompt,
-            size: input.size,
-            n: 1,
-            response_format: "b64_json",
-            num_inference_steps: input.steps,
-            guidance_scale: input.cfg_scale,
-            ...(input.seed !== null ? { seed: input.seed } : {}),
-          }),
+          body: JSON.stringify(
+            input.model_id === qwenImageId
+              ? {
+                  model: input.model_id,
+                  prompt: input.prompt,
+                  size: input.size,
+                  aspect_ratio: input.aspect_ratio,
+                  n: 1,
+                  output_format: "png",
+                  response_format: "b64_json",
+                }
+              : {
+                  model: input.model_id,
+                  prompt: input.prompt,
+                  size: input.size,
+                  n: 1,
+                  response_format: "b64_json",
+                  num_inference_steps: input.steps,
+                  guidance_scale: input.cfg_scale,
+                  ...(input.seed !== null ? { seed: input.seed } : {}),
+                },
+          ),
           signal: AbortSignal.timeout(100000),
         },
       );
@@ -238,9 +286,7 @@ export async function imageHandler(
         result.cost >= 0
       )
         cost = result.cost;
-      const encoded = result.data?.[0]?.b64_json;
-      if (typeof encoded !== "string") throw new Error("MISSING_IMAGE");
-      const image = decodeImage(encoded);
+      const image = await providerImage(result.data?.[0]);
       objectPath = `${user.id}/${id}.${image.extension}`;
       const { error: uploadError } = await admin.storage
         .from(imageBucket)
@@ -258,7 +304,7 @@ export async function imageHandler(
     } catch (error) {
       const raw = error instanceof Error ? error.message : "GENERATION_ERROR";
       const code =
-        /^(PROVIDER_\d{3}|STORAGE_ERROR|PERSISTENCE_ERROR|MISSING_IMAGE|INVALID_IMAGE|IMAGE_LIMIT)$/.test(
+        /^(PROVIDER_\d{3}|STORAGE_ERROR|PERSISTENCE_ERROR|MISSING_IMAGE|INVALID_IMAGE|IMAGE_LIMIT|BODY_LIMIT|INVALID_IMAGE_URL|IMAGE_DOWNLOAD_ERROR)$/.test(
           raw,
         )
           ? raw
@@ -276,6 +322,7 @@ export async function imageHandler(
       if (finalizeError) log("persistence", "FINALIZE_FAILED", id);
       return json(
         {
+          code,
           error:
             code === "PROVIDER_402"
               ? "NanoGPT no tiene saldo suficiente."

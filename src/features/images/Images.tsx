@@ -5,6 +5,7 @@ import {
   imageModels,
   imageModel,
   imagePriceLabel,
+  qwenImageId,
 } from "../../../shared/images";
 import {
   generateImage,
@@ -19,13 +20,15 @@ import { Button } from "../../components/ui/button";
 export function Images() {
   const [model, setModel] = useState(imageModels[0].id);
   const [prompt, setPrompt] = useState("");
-  const [size, setSize] = useState("1024x1024");
+  const [size, setSize] = useState(imageModels[0].resolutions[0]);
+  const [aspect, setAspect] = useState("1:1");
   const [steps, setSteps] = useState(12);
   const [cfg, setCfg] = useState(7.5);
   const [seed, setSeed] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const selected = imageModel(model)!;
+  const isQwen = model === qwenImageId;
   const [deleting, setDeleting] = useState<string | null>(null);
   const gallery = useInfiniteQuery({
     queryKey: ["image-generations"],
@@ -77,9 +80,10 @@ export function Images() {
         model_id: model,
         prompt: prompt.trim(),
         size,
-        steps,
-        cfg_scale: cfg,
-        seed: seed === "" ? null : Number(seed),
+        steps: isQwen ? null : steps,
+        cfg_scale: isQwen ? null : cfg,
+        seed: isQwen || seed === "" ? null : Number(seed),
+        ...(isQwen ? { aspect_ratio: aspect } : {}),
       });
       setNotice("Imagen guardada en tu galería privada.");
     } catch (error) {
@@ -115,7 +119,12 @@ export function Images() {
             <select
               value={model}
               disabled={busy}
-              onChange={(event) => setModel(event.target.value)}
+              onChange={(event) => {
+                const next = imageModel(event.target.value)!;
+                setModel(next.id);
+                setSize(next.resolutions[0]);
+                setAspect("1:1");
+              }}
             >
               {imageModels.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -138,51 +147,71 @@ export function Images() {
               ))}
             </select>
           </label>
+          {selected.aspect_ratios && (
+            <label>
+              Proporción
+              <select
+                value={aspect}
+                disabled={busy}
+                onChange={(event) => setAspect(event.target.value)}
+              >
+                {selected.aspect_ratios.map((ratio) => (
+                  <option key={ratio} value={ratio}>
+                    {ratio}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="wide">
             Descripción de la imagen
             <textarea
               rows={4}
               required
-              maxLength={3000}
+              maxLength={selected.max_prompt_characters}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="Una ciudad flotante al atardecer, estilo anime, luz cálida y detalles arquitectónicos…"
             />
           </label>
-          <label>
-            Pasos
-            <input
-              type="number"
-              required
-              min={1}
-              max={50}
-              value={steps}
-              onChange={(event) => setSteps(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            CFG
-            <input
-              type="number"
-              required
-              min={0}
-              max={20}
-              step={0.5}
-              value={cfg}
-              onChange={(event) => setCfg(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            Semilla (opcional)
-            <input
-              type="number"
-              min={0}
-              max={2147483647}
-              value={seed}
-              onChange={(event) => setSeed(event.target.value)}
-              placeholder="Aleatoria"
-            />
-          </label>
+          {!isQwen && (
+            <>
+              <label>
+                Pasos
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  max={50}
+                  value={steps}
+                  onChange={(event) => setSteps(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                CFG
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  max={20}
+                  step={0.5}
+                  value={cfg}
+                  onChange={(event) => setCfg(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Semilla (opcional)
+                <input
+                  type="number"
+                  min={0}
+                  max={2147483647}
+                  value={seed}
+                  onChange={(event) => setSeed(event.target.value)}
+                  placeholder="Aleatoria"
+                />
+              </label>
+            </>
+          )}
           <div className="image-price">
             <strong>{imagePriceLabel(model, size)}</strong>
             <small>Tarifa de lista aproximada · 1 imagen por solicitud</small>
@@ -195,8 +224,10 @@ export function Images() {
             {busy ? "Generando…" : "Generar imagen"}
           </Button>
           <small className="muted">
-            La semilla no garantiza resultados idénticos. El costo real se
-            guarda cuando el proveedor lo reporta.
+            {isQwen
+              ? "Qwen administra automáticamente la generación; elige resolución y proporción."
+              : "La semilla no garantiza resultados idénticos."}{" "}
+            El costo real se guarda cuando el proveedor lo reporta.
           </small>
         </div>
       </form>
@@ -238,10 +269,18 @@ export function Images() {
               <strong>{imageModel(row.model_id)?.name || row.model_id}</strong>
               <p>{row.prompt}</p>
               <small className="muted">
-                {row.size} · {row.steps} pasos · CFG {row.cfg_scale} ·{" "}
-                {row.seed === null
-                  ? "Semilla aleatoria"
-                  : `Semilla ${row.seed}`}
+                {row.model_id === qwenImageId ? (
+                  <>
+                    {row.size.toUpperCase()} · {row.aspect_ratio || "1:1"}
+                  </>
+                ) : (
+                  <>
+                    {row.size} · {row.steps} pasos · CFG {row.cfg_scale} ·{" "}
+                    {row.seed === null
+                      ? "Semilla aleatoria"
+                      : `Semilla ${row.seed}`}
+                  </>
+                )}
               </small>
               <div className="row">
                 <small>

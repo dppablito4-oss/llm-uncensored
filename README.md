@@ -123,6 +123,6 @@ Fuentes técnicas: [Supabase Auth en Edge](https://supabase.com/docs/guides/func
 
 ## Imágenes
 
-La sección **Imágenes** ofrece Animagine XL 4.0 y Moxie Diffusion XL, con tamaño, pasos, CFG, semilla opcional y precio antes de generar. Incluye galería privada paginada, descarga y eliminación del archivo y prompt, conservando el evento de consumo. Ver [docs/IMAGES.md](docs/IMAGES.md).
+La sección **Imágenes** usa **Qwen Image 3 Uncensored** por defecto, con salida 1K/2K, ocho proporciones y precio de lista de USD 0,04 por imagen. También conserva Animagine XL 4.0 y Moxie Diffusion XL con sus controles de difusión. Los controles y límites se adaptan al modelo. Incluye galería privada paginada, descarga y eliminación del archivo y prompt, conservando el evento de consumo. Ver [docs/IMAGES.md](docs/IMAGES.md).
 
 La app está publicada en [GitHub Pages](https://chat.sypablitodp.site/). Los despliegues desde main se validan antes de publicar.
