@@ -204,10 +204,8 @@ export function Chat({ userId }: { userId: string }) {
           " Tu mensaje sigue en el editor. Revisa el historial antes de reenviarlo si hubo un corte de conexión.";
       setNotice(failureNotice);
     } finally {
-      setBusy(false);
       setPendingUser("");
       setDraft("");
-      abort.current = null;
       await Promise.all([
         client.invalidateQueries({ queryKey: ["messages", cid] }),
         client.invalidateQueries({ queryKey: ["conversations"] }),
@@ -221,6 +219,10 @@ export function Chat({ userId }: { userId: string }) {
             draftText: !accepted && action === "send" ? content : "",
           },
         });
+      else {
+        abort.current = null;
+        setBusy(false);
+      }
     }
   }
   async function selectPreset(value: string) {

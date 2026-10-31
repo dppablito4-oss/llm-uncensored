@@ -309,7 +309,18 @@ describe("Flujo UI completo con proveedor simulado", () => {
       user: { id: "u1", email: "test@example.com" },
     });
     mock.failFetch = true;
-    mount();
+    const client = mount();
+    let releaseCache!: () => void;
+    const cacheReady = new Promise<void>((resolve) => {
+      releaseCache = resolve;
+    });
+    const originalInvalidate = client.invalidateQueries.bind(client);
+    vi.spyOn(client, "invalidateQueries").mockImplementation(
+      async (filters, options) => {
+        await cacheReady;
+        await originalInvalidate(filters, options);
+      },
+    );
     const editor = await screen.findByRole("textbox", { name: "Mensaje" });
     await user.type(editor, "Este mensaje no debe perderse");
     await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
@@ -319,9 +330,24 @@ describe("Flujo UI completo con proveedor simulado", () => {
         .value,
     ).toBe("Este mensaje no debe perderse");
     expect(mock.tables.conversations).toHaveLength(1);
+    // A retry must wait until the newly-created conversation is on screen.
+    // Otherwise it can start on /chat and create a second conversation.
+    expect(screen.queryByRole("button", { name: "Enviar mensaje" })).toBeNull();
+    releaseCache();
+    const retry = await screen.findByRole("button", { name: "Enviar mensaje" });
+    await waitFor(() =>
+      expect((retry as HTMLButtonElement).disabled).toBe(false),
+    );
+    expect(window.location.hash).toBe(
+      "#/chat/" + mock.tables.conversations[0].id,
+    );
     mock.failFetch = false;
-    await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
-    await screen.findByText("Hola desde el proveedor simulado");
+    await user.click(retry);
+    await screen.findByText(
+      "Hola desde el proveedor simulado",
+      {},
+      { timeout: 5000 },
+    );
     expect(mock.tables.conversations).toHaveLength(1);
     expect(mock.sent).toHaveLength(1);
     cleanup();
