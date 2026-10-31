@@ -8,6 +8,14 @@ import {
 import { encodeEvent } from "../../../shared/sse.ts";
 import { providerEvents } from "../../../shared/provider.ts";
 import { findModel, modelReasoning } from "../../../shared/models.ts";
+import { defaultModel } from "../../../shared/models.ts";
+import {
+  contextCost,
+  planSummary,
+  summaryNeeded,
+  type ConversationSummary,
+  type HistoryTurn,
+} from "../../../shared/summary.ts";
 
 const messages: Record<string, string> = {
   RATE_LIMIT: "Demasiadas solicitudes. Espera un minuto.",
@@ -213,6 +221,15 @@ export async function handler(
       providerStarted = false,
       inputReported = false,
       outputReported = false;
+    const compact = {
+      started: false,
+      input: 0,
+      output: 0,
+      inputReported: false,
+      outputReported: false,
+      cost: null as number | null,
+      reserve: 0,
+    };
     const stream = new ReadableStream<Uint8Array>({
       async start(sink) {
         const send = (data: unknown) => {
@@ -247,12 +264,187 @@ export async function handler(
                   .limit(100)
               : { data: [], error: null };
           if (memoryError) throw new Error("MEMORY_ERROR");
-          const turns = (history || [])
+          const recent: HistoryTurn[] = (history || [])
             .reverse()
-            .filter((m) => m.status === "complete")
-            .map((m) => ({ role: m.role, content: m.content }));
+            .filter((m) => m.status === "complete");
+          const system =
+            "You are a helpful assistant. Be honest about uncertainty. Do not claim to remember information outside the supplied context.";
+          // Validate the mandatory current message before doing any paid compaction.
+          buildContext(
+            system,
+            preset?.system_prompt || "",
+            [],
+            recent.slice(-1),
+            contextBudget,
+            0,
+          );
+          let summary: ConversationSummary | null = null;
+          if (profile.auto_summary !== false) {
+            const { data, error } = await db
+              .from("conversation_summaries")
+              .select("content,through_seq,source_count")
+              .eq("conversation_id", input.conversation_id)
+              .maybeSingle();
+            if (error) throw new Error("HISTORY_ERROR");
+            summary = data;
+            if (
+              summaryNeeded(
+                recent,
+                summary,
+                contextBudget,
+                system + (preset?.system_prompt || ""),
+              )
+            ) {
+              const { data: oldest, error: sourceError } = await db
+                .from("messages")
+                .select("role,content,status,seq")
+                .eq("conversation_id", input.conversation_id)
+                .eq("status", "complete")
+                .gt("seq", summary?.through_seq ?? 0)
+                .order("seq", { ascending: true })
+                .limit(60);
+              if (sourceError) throw new Error("HISTORY_ERROR");
+              const plan = planSummary(
+                oldest || [],
+                recent,
+                summary,
+                contextBudget,
+              );
+              if (plan) {
+                let summaryText = "";
+                try {
+                  const { data: summaryModel } = await admin
+                    .from("models")
+                    .select("id")
+                    .eq("id", defaultModel)
+                    .eq("enabled", true)
+                    .maybeSingle();
+                  if (!summaryModel) throw new Error("MODEL_UNAVAILABLE");
+                  const summaryInput = contextCost(plan.messages),
+                    summaryOutput = 2048;
+                  const { error: quotaError } = await admin.rpc(
+                    "prepare_generation",
+                    {
+                      p_event: event,
+                      p_input: summaryInput,
+                      p_max_output: summaryOutput,
+                      // Protect room for the answer before spending on compaction.
+                      p_spent: contextBudget + maxTokens,
+                    },
+                  );
+                  if (quotaError) throw new Error("SUMMARY_QUOTA");
+                  controller.signal.throwIfAborted();
+                  send({
+                    type: "status",
+                    message: "Resumiendo los mensajes anteriores…",
+                  });
+                  compact.reserve = summaryInput + summaryOutput;
+                  compact.input = summaryInput;
+                  compact.started = true;
+                  const summarySignal = AbortSignal.any([
+                    controller.signal,
+                    AbortSignal.timeout(30000),
+                  ]);
+                  const response = await fetch(
+                    "https://nano-gpt.com/api/v1/chat/completions",
+                    {
+                      method: "POST",
+                      signal: summarySignal,
+                      headers: {
+                        Authorization: `Bearer ${key}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        model: defaultModel,
+                        messages: plan.messages,
+                        stream: true,
+                        stream_options: { include_usage: true },
+                        max_tokens: summaryOutput,
+                        temperature: 0.2,
+                        reasoning_effort: modelReasoning(defaultModel, "low"),
+                      }),
+                    },
+                  );
+                  for await (const item of providerEvents(
+                    response,
+                    summarySignal,
+                  )) {
+                    if (item.text) {
+                      summaryText += item.text;
+                      if (tokenBound(summaryText) > 6000)
+                        throw new Error("SUMMARY_SIZE");
+                    }
+                    if (item.usage) {
+                      if (
+                        Number.isInteger(item.usage.prompt_tokens) &&
+                        item.usage.prompt_tokens! >= 0
+                      ) {
+                        compact.input = item.usage.prompt_tokens!;
+                        compact.inputReported = true;
+                      }
+                      if (
+                        Number.isInteger(item.usage.completion_tokens) &&
+                        item.usage.completion_tokens! >= 0
+                      ) {
+                        compact.output = item.usage.completion_tokens!;
+                        compact.outputReported = true;
+                      }
+                      if (Number.isFinite(item.usage.cost))
+                        compact.cost = Math.max(0, item.usage.cost!);
+                    }
+                  }
+                  summaryText = summaryText.trim();
+                  if (!summaryText || tokenBound(summaryText) > plan.maxBytes)
+                    throw new Error("SUMMARY_SIZE");
+                  controller.signal.throwIfAborted();
+                  const { error: saveError } = await admin.rpc(
+                    "save_conversation_summary",
+                    {
+                      p_event: event,
+                      p_previous_seq: summary?.through_seq ?? 0,
+                      p_through_seq: plan.throughSeq,
+                      p_content: summaryText,
+                      p_source_count: plan.sourceCount,
+                    },
+                  );
+                  if (saveError) throw new Error("SUMMARY_SAVE");
+                  summary = {
+                    content: summaryText,
+                    through_seq: plan.throughSeq,
+                    source_count: plan.sourceCount,
+                  };
+                  if (plan.throughSeq < (recent[0]?.seq ?? 0))
+                    send({
+                      type: "context",
+                      message:
+                        "El historial antiguo se está resumiendo por partes para limitar el consumo. Los próximos envíos pueden incorporar más mensajes al resumen.",
+                    });
+                  if (plan.shortened)
+                    send({
+                      type: "context",
+                      message:
+                        "Se actualizaron los recuerdos de este chat. Algunos mensajes muy extensos se resumieron a partir de extractos; los originales siguen en el historial.",
+                    });
+                } catch (error) {
+                  if (controller.signal.aborted) throw error;
+                  log("summary", "SUMMARY_UNAVAILABLE", event);
+                  send({
+                    type: "context",
+                    message:
+                      "No se pudo actualizar el resumen. Esta respuesta usará el resumen anterior disponible y los mensajes recientes.",
+                  });
+                } finally {
+                  if (!compact.outputReported)
+                    compact.output = tokenBound(summaryText);
+                }
+              }
+            }
+          }
+          const turns = recent.filter(
+            (m) => m.seq > (summary?.through_seq ?? 0),
+          );
           const context = buildContext(
-            "You are a helpful assistant. Be honest about uncertainty. Do not claim to remember information outside the supplied context.",
+            system,
             preset?.system_prompt || "",
             rankMemories(
               (memories || []).map((m) => m.content),
@@ -261,7 +453,17 @@ export async function handler(
             turns,
             contextBudget,
             memoryBudget,
+            summary?.content || "",
           );
+          if (summary)
+            send({
+              type: "context",
+              message: context[0].content.includes(
+                JSON.stringify(summary.content),
+              )
+                ? `Resumen de ${summary.source_count} mensajes anteriores activo. El historial original se conserva.`
+                : "El mensaje actual deja poco espacio para el resumen. Reduce su tamaño o amplía el contexto en Configuración.",
+            });
           inputTokens = context.reduce(
             (sum, m) => sum + tokenBound(m.content) + 32,
             0,
@@ -272,6 +474,11 @@ export async function handler(
               p_event: event,
               p_input: inputTokens,
               p_max_output: maxTokens,
+              p_spent: compact.started
+                ? compact.inputReported && compact.outputReported
+                  ? compact.input + compact.output
+                  : compact.reserve
+                : 0,
             },
           );
           if (prepareError)
@@ -282,6 +489,7 @@ export async function handler(
             );
           controller.signal.throwIfAborted();
           providerStarted = true;
+          send({ type: "status", message: "Pensando" });
           const response = await fetch(
             "https://nano-gpt.com/api/v1/chat/completions",
             {
@@ -377,12 +585,19 @@ export async function handler(
             p_event: event,
             p_content: full,
             p_status: status,
-            p_input: inputTokens,
-            p_output: outputTokens,
-            p_cost: cost,
+            p_input: inputTokens + (compact.started ? compact.input : 0),
+            p_output: outputTokens + compact.output,
+            p_cost:
+              cost === null && compact.cost === null
+                ? null
+                : (cost ?? 0) + (compact.cost ?? 0),
             p_error: errorCode,
-            p_usage_reported: inputReported && outputReported,
-            p_provider_started: providerStarted,
+            p_usage_reported:
+              (providerStarted || compact.started) &&
+              (!providerStarted || (inputReported && outputReported)) &&
+              (!compact.started ||
+                (compact.inputReported && compact.outputReported)),
+            p_provider_started: providerStarted || compact.started,
           });
           if (persistError) {
             log("persistence", "FINALIZE_FAILED", event);

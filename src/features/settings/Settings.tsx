@@ -36,10 +36,17 @@ export function Settings() {
         "messages",
         "presets",
         "memories",
+        "conversation_summaries",
         "usage_events",
         "image_generations",
       ];
-      const data = await Promise.all(tables.map((t) => list(t)));
+      const data = await Promise.all(
+        tables.map((t) =>
+          t === "conversation_summaries"
+            ? list(t, "updated_at", "conversation_id")
+            : list(t),
+        ),
+      );
       download(
         "forma-datos.json",
         Object.fromEntries(tables.map((t, i) => [t, data[i]])),
@@ -187,6 +194,22 @@ export function Settings() {
             </select>
           </label>
           <ModelInfo id={profile.default_model} />
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={profile.auto_summary !== false}
+              onChange={(e) => void patch({ auto_summary: e.target.checked })}
+            />
+            Resumir automáticamente los chats largos
+          </label>
+          <p className="muted">
+            El resumen conserva objetivos, decisiones y preferencias solo dentro
+            de cada chat. Se reutiliza junto a los mensajes recientes y no
+            elimina el historial. Al actualizarlo se hace como máximo una
+            llamada adicional por envío a GLM Flash, con hasta 2048 tokens de
+            salida. Su consumo se incluye en la cuota y en el costo reportado
+            del chat.
+          </p>
           <p className="muted">
             Los parámetros del preset tienen prioridad. El contexto usa un
             cálculo conservador por bytes UTF-8, con hasta 60 mensajes

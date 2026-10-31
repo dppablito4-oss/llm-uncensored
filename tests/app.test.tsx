@@ -385,4 +385,28 @@ describe("Flujo UI completo con proveedor simulado", () => {
       "Mensaje histórico 1",
     );
   });
+  it("recupera el resumen al reabrir un chat y muestra su contenido como texto", async () => {
+    mock.setSession({
+      access_token: "user-token",
+      user: { id: "u1", email: "test@example.com" },
+    });
+    mock.tables.conversations = [
+      { id: "summarized-chat", title: "Proyecto", model_id: defaultModel },
+    ];
+    mock.tables.conversation_summaries = [
+      {
+        conversation_id: "summarized-chat",
+        source_count: 12,
+        through_seq: 12,
+        content: "La tienda se llama Forma. <script>alert('x')</script>",
+      },
+    ];
+    window.location.hash = "/chat/summarized-chat";
+    mount();
+    await screen.findByText("Resumen de este chat · 12 mensajes");
+    expect(
+      screen.getByText("La tienda se llama Forma. <script>alert('x')</script>"),
+    ).toBeTruthy();
+    expect(document.querySelector(".composer-wrap script")).toBeNull();
+  });
 });

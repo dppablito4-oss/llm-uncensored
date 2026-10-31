@@ -55,6 +55,12 @@ beforeAll(async () => {
     readFileSync("supabase/migrations/20261031021036_qwen_image_3.sql", "utf8"),
   );
   await db.exec("set search_path=forma,public");
+  await db.exec(
+    readFileSync(
+      "supabase/migrations/20261031023635_conversation_summaries.sql",
+      "utf8",
+    ),
+  );
   await db.query("insert into auth.users values($1,$2),($3,$4)", [
     a,
     "a@example.com",
@@ -76,6 +82,170 @@ beforeAll(async () => {
   ).rows[0].id;
 }, 60000);
 afterAll(() => db.close());
+
+describe.sequential("Resumen persistido y protección de sus fuentes", () => {
+  const owner = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  let conversation: string, event: string;
+  let sources: { id: string; seq: number }[];
+  beforeAll(async () => {
+    await db.query("insert into auth.users values($1,'summary@example.com')", [
+      owner,
+    ]);
+    await asUser(owner, "select ensure_workspace()");
+    conversation = (
+      await asUser<{ id: string }>(
+        owner,
+        "insert into forma.conversations(user_id,model_id) values($1,$2) returning id",
+        [owner, model],
+      )
+    ).rows[0].id;
+    for (const role of ["user", "assistant", "user", "assistant"])
+      await db.query(
+        "insert into forma.messages(conversation_id,user_id,role,content) values($1,$2,$3,'source')",
+        [conversation, owner, role],
+      );
+    sources = (
+      await db.query<{ id: string; seq: number }>(
+        "select id,seq from forma.messages where conversation_id=$1 order by seq",
+        [conversation],
+      )
+    ).rows;
+    event = (
+      await db.query<{ id: string }>(
+        "select forma.begin_generation($1,$2,gen_random_uuid(),'current',$3,null,'send',null,100) as id",
+        [owner, conversation, model],
+      )
+    ).rows[0].id;
+  });
+  it("reserva el resumen junto a la respuesta; la cuota incluye consumo previo", async () => {
+    await db.query("select forma.prepare_generation($1,200,100,500)", [event]);
+    expect(
+      (
+        await db.query<{ reserved_tokens: number }>(
+          "select reserved_tokens from forma.usage_events where id=$1",
+          [event],
+        )
+      ).rows[0].reserved_tokens,
+    ).toBe(800);
+    await db.query(
+      "update forma.user_limits set daily_tokens=799 where user_id=$1",
+      [owner],
+    );
+    await expect(
+      db.query("select forma.prepare_generation($1,200,100,500)", [event]),
+    ).rejects.toThrow(/TOKEN_LIMIT/);
+    await db.query(
+      "update forma.user_limits set daily_tokens=250000 where user_id=$1",
+      [owner],
+    );
+  });
+  it("guarda solo un cursor válido y permite leer únicamente al dueño", async () => {
+    const sql =
+      "select forma.save_conversation_summary($1,0,$2,'Prefiere respuestas breves',2)";
+    await expect(asUser(owner, sql, [event, sources[1].seq])).rejects.toThrow(
+      /permission denied/,
+    );
+    await db.query(sql, [event, sources[1].seq]);
+    expect(
+      (await asUser(owner, "select * from forma.conversation_summaries")).rows,
+    ).toHaveLength(1);
+    expect(
+      (await asUser(b, "select * from forma.conversation_summaries")).rows,
+    ).toHaveLength(0);
+    await expect(
+      asUser(owner, "update forma.conversation_summaries set content='fake'"),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(owner, "delete from forma.conversation_summaries"),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(
+        owner,
+        "insert into forma.conversation_summaries(conversation_id,user_id,content,through_seq,source_count) values($1,$2,'fake',1,1)",
+        [conversation, owner],
+      ),
+    ).rejects.toThrow(/permission denied/);
+    await expect(db.query(sql, [event, sources[1].seq])).rejects.toThrow(
+      /SUMMARY_CHANGED/,
+    );
+    await expect(
+      db.query(
+        "select forma.save_conversation_summary($1,$2,999999,'fake',3)",
+        [event, sources[1].seq],
+      ),
+    ).rejects.toThrow(/INVALID_SUMMARY_CURSOR/);
+    await expect(
+      db.query("select forma.save_conversation_summary($1,$2,$3,'fake',999)", [
+        event,
+        sources[1].seq,
+        sources[3].seq,
+      ]),
+    ).rejects.toThrow(/INVALID_SUMMARY_COUNT/);
+  });
+  it("una edición posterior conserva el resumen; editar una fuente lo invalida", async () => {
+    await db.query(
+      "select forma.finish_generation($1,'answer','complete',30,5,.003,null,true,true)",
+      [event],
+    );
+    const edit = (
+      await db.query<{ id: string }>(
+        "select forma.begin_generation($1,$2,gen_random_uuid(),'edited',$3,null,'edit',$4,100) as id",
+        [owner, conversation, model, sources[2].id],
+      )
+    ).rows[0].id;
+    expect(
+      (await asUser(owner, "select * from forma.conversation_summaries")).rows,
+    ).toHaveLength(1);
+    await db.query(
+      "select forma.finish_generation($1,'new answer','complete',20,3,null,null,true,true)",
+      [edit],
+    );
+    const rewind = (
+      await db.query<{ id: string }>(
+        "select forma.begin_generation($1,$2,gen_random_uuid(),'',$3,null,'regenerate',$4,100) as id",
+        [owner, conversation, model, sources[0].id],
+      )
+    ).rows[0].id;
+    expect(
+      (await asUser(owner, "select * from forma.conversation_summaries")).rows,
+    ).toHaveLength(0);
+    await expect(
+      db.query("select forma.save_conversation_summary($1,0,$2,'stale',2)", [
+        event,
+        sources[1].seq,
+      ]),
+    ).rejects.toThrow(/NOT_RUNNING/);
+    await db.query(
+      "select forma.finish_generation($1,'','error',0,0,null,null,false,false)",
+      [rewind],
+    );
+    const fresh = (
+      await db.query<{ id: string }>(
+        "select forma.begin_generation($1,$2,gen_random_uuid(),'next',$3,null,'send',null,100) as id",
+        [owner, conversation, model],
+      )
+    ).rows[0].id;
+    await db.query(
+      "select forma.save_conversation_summary($1,0,$2,'Resumen anterior',1)",
+      [fresh, sources[0].seq],
+    );
+    expect(
+      (await asUser(owner, "select * from forma.conversation_summaries")).rows,
+    ).toHaveLength(1);
+    await asUser(owner, "delete from forma.conversations where id=$1", [
+      conversation,
+    ]);
+    expect(
+      (await asUser(owner, "select * from forma.conversation_summaries")).rows,
+    ).toHaveLength(0);
+    await expect(
+      db.query("select forma.save_conversation_summary($1,0,$2,'stale',1)", [
+        fresh,
+        sources[0].seq,
+      ]),
+    ).rejects.toThrow(/NOT_RUNNING/);
+  });
+});
 describe.sequential("Migración PostgreSQL real y aislamiento RLS", () => {
   it("conserva permisos de tablas de otras aplicaciones", async () => {
     const result = await db.query<{ allowed: boolean }>(

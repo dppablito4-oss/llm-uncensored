@@ -38,6 +38,7 @@ export type Profile = {
   default_model: string;
   default_preset_id: string | null;
   memory_enabled: boolean;
+  auto_summary: boolean;
   temperature: number;
   top_p: number;
   max_tokens: number;

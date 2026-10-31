@@ -1,7 +1,17 @@
 import { supabase } from "../lib/supabase";
 import { sseData } from "../../shared/sse";
+import type { ConversationSummary } from "../../shared/summary";
+export async function getConversationSummary(conversationId: string) {
+  const { data, error } = await supabase
+    .from("conversation_summaries")
+    .select("content,through_seq,source_count")
+    .eq("conversation_id", conversationId)
+    .limit(1);
+  if (error) throw error;
+  return (data?.[0] as ConversationSummary | undefined) ?? null;
+}
 export type ChatEvent = {
-  type: "accepted" | "delta" | "done" | "error";
+  type: "accepted" | "delta" | "done" | "error" | "status" | "context";
   text?: string;
   status?: string;
   message?: string;

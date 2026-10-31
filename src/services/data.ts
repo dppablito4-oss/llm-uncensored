@@ -2,6 +2,7 @@ import { supabase as db } from "../lib/supabase";
 export async function list<T>(
   table: string,
   order = "created_at",
+  tieBreaker = "id",
 ): Promise<T[]> {
   const all: T[] = [];
   for (let offset = 0; ; offset += 500) {
@@ -9,7 +10,7 @@ export async function list<T>(
       .from(table)
       .select("*")
       .order(order, { ascending: false })
-      .order("id")
+      .order(tieBreaker)
       .range(offset, offset + 499);
     if (error) throw error;
     all.push(...(data as T[]));

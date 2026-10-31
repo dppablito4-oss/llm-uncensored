@@ -1,0 +1,28 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+set search_path=forma,public,extensions;
+select plan(9);
+insert into auth.users(id,email) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','summary-owner@example.com');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',true);
+select ensure_workspace();
+reset role;
+insert into conversations(id,user_id,model_id) values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','z-ai/glm-5.3-flash-uncensored');
+insert into conversation_summaries(conversation_id,user_id,content,through_seq,source_count)
+ values('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Private summary',1,1);
+select ok(not has_table_privilege('anon','forma.conversation_summaries','select'),'Anon cannot read summaries');
+select ok(not has_function_privilege('authenticated','forma.save_conversation_summary(uuid,bigint,bigint,text,integer)','execute'),'Client cannot forge summary');
+select ok(not has_function_privilege('authenticated','forma.prepare_generation(uuid,integer,integer,integer)','execute'),'Client cannot alter quota reservation');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',true);
+select is((select count(*)::int from conversation_summaries),1,'Owner can read summary');
+select throws_ok($$update conversation_summaries set content='forged'$$,'42501',null,'Owner cannot forge summary');
+select throws_ok($$delete from conversation_summaries$$,'42501',null,'Client cannot delete only summary');
+select throws_ok($$insert into conversation_summaries(conversation_id,user_id,content,through_seq,source_count) values(gen_random_uuid(),'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','forged',1,1)$$,'42501',null,'Client cannot insert summary');
+select set_config('request.jwt.claim.sub','cccccccc-cccc-4ccc-8ccc-cccccccccccc',true);
+select is((select count(*)::int from conversation_summaries),0,'Other user cannot read summary');
+reset role;
+delete from conversations where id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+select is((select count(*)::int from conversation_summaries),0,'Deleting chat also deletes summary');
+select * from finish();
+rollback;

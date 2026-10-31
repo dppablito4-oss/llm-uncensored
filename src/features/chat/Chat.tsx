@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -23,7 +27,7 @@ import {
   messagePageSize,
 } from "../../services/messages";
 import { save, change } from "../../services/data";
-import { streamChat } from "../../services/chat";
+import { streamChat, getConversationSummary } from "../../services/chat";
 import { download } from "../../lib/utils";
 import { useData } from "../../hooks/useData";
 import { useUsage } from "../../hooks/useUsage";
@@ -95,6 +99,8 @@ export function Chat({ userId }: { userId: string }) {
     [draft, setDraft] = useState(""),
     [pendingUser, setPendingUser] = useState(""),
     [busy, setBusy] = useState(false),
+    [phase, setPhase] = useState("Pensando"),
+    [contextNotice, setContextNotice] = useState(""),
     [notice, setNotice] = useState(initial.chatNotice || "");
   const abort = useRef<AbortController | null>(null),
     scroll = useRef<HTMLDivElement>(null),
@@ -123,6 +129,11 @@ export function Chat({ userId }: { userId: string }) {
       page.length === messagePageSize ? page.at(-1)!.seq : undefined,
   });
   const messages = (query.data?.pages.flat() || []).slice().reverse();
+  const summaryQuery = useQuery({
+    queryKey: ["conversation-summary", id],
+    enabled: !!id,
+    queryFn: () => getConversationSummary(id!),
+  });
   useEffect(() => {
     // Recovery data is consumed once so a later reload cannot resurrect an
     // already-sent draft, and another signed-in user never sees it.
@@ -156,6 +167,8 @@ export function Chat({ userId }: { userId: string }) {
     setNotice("");
     setBusy(true);
     setDraft("");
+    setPhase("Pensando");
+    setContextNotice("");
     setPendingUser(action === "regenerate" ? "" : content);
     follow.current = true;
     const controller = new AbortController();
@@ -189,6 +202,11 @@ export function Chat({ userId }: { userId: string }) {
             if (action === "send") setText("");
           }
           if (event.type === "delta") setDraft((v) => v + (event.text || ""));
+          if (event.type === "status") setPhase(event.message || "Pensando");
+          if (event.type === "context")
+            setContextNotice((previous) =>
+              [previous, event.message].filter(Boolean).join(" "),
+            );
         },
       );
       accepted = true;
@@ -210,6 +228,7 @@ export function Chat({ userId }: { userId: string }) {
         client.invalidateQueries({ queryKey: ["messages", cid] }),
         client.invalidateQueries({ queryKey: ["conversations"] }),
         client.invalidateQueries({ queryKey: ["usage-summary"] }),
+        client.invalidateQueries({ queryKey: ["conversation-summary", cid] }),
       ]);
       if (!id && cid && mounted.current)
         navigate("/chat/" + cid, {
@@ -460,7 +479,8 @@ ${m.content}`,
                     <Markdown content={draft} />
                   ) : (
                     <span className="thinking">
-                      Pensando<span>•••</span>
+                      {phase}
+                      <span>•••</span>
                     </span>
                   )}
                 </div>
@@ -484,6 +504,26 @@ ${m.content}`,
         )}
       </div>
       <div className="composer-wrap">
+        {summaryQuery.data && (
+          <details className="muted small">
+            <summary>
+              Resumen de este chat · {summaryQuery.data.source_count} mensajes
+              {profile?.auto_summary === false ? " · desactivado" : ""}
+            </summary>
+            <p style={{ whiteSpace: "pre-wrap" }}>
+              {summaryQuery.data.content}
+            </p>
+            <p>
+              Puede omitir detalles. Los mensajes originales siguen en el
+              historial.
+            </p>
+          </details>
+        )}
+        {contextNotice && (
+          <p className="muted small" role="status">
+            {contextNotice}
+          </p>
+        )}
         {(notice || query.error) && (
           <div className="notice" role="alert">
             {notice || query.error?.message}
