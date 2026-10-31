@@ -228,8 +228,14 @@ function Workspace({ session }: { session: Session }) {
           {sidebar ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
         </button>
         <Routes>
-          <Route path="/chat" element={<Chat key="new" />} />
-          <Route path="/chat/:id" element={<ChatRoute />} />
+          <Route
+            path="/chat"
+            element={<Chat key="new" userId={session.user.id} />}
+          />
+          <Route
+            path="/chat/:id"
+            element={<ChatRoute userId={session.user.id} />}
+          />
           <Route path="/presets" element={<Presets />} />
           <Route path="/memory" element={<Memory />} />
           <Route path="/settings" element={<Settings />} />
@@ -240,10 +246,10 @@ function Workspace({ session }: { session: Session }) {
     </div>
   );
 }
-function ChatRoute() {
+function ChatRoute({ userId }: { userId: string }) {
   // Remount on conversation navigation to abort any active request.
   const location = useLocation().pathname;
-  return <Chat key={location} />;
+  return <Chat key={location} userId={userId} />;
 }
 export function App() {
   const { theme } = useUI(),

@@ -30,12 +30,13 @@ const mock = vi.hoisted(() => {
     },
     event: (e: string, s: unknown) => listeners.forEach((f) => f(e, s)),
     sent: [] as Record<string, unknown>[],
+    failFetch: false,
   };
 });
 vi.mock("../src/lib/supabase", () => ({
   configured: true,
   supabase: {
-    rpc: async () => ({ error: null }),
+    rpc: async () => ({ data: null, error: null }),
     auth: {
       getSession: async () => ({ data: { session: mock.getSession() } }),
       onAuthStateChange: (callback: (e: string, s: unknown) => void) => {
@@ -63,7 +64,10 @@ vi.mock("../src/lib/supabase", () => ({
     from: (table: string) => {
       let filters: Record<string, unknown> = {},
         upsert: Record<string, unknown> | undefined,
-        single = false;
+        single = false,
+        descending = false,
+        maxRows = Infinity,
+        before: { key: string; value: number } | undefined;
       const result = () => {
         if (upsert) {
           const row = {
@@ -75,14 +79,36 @@ vi.mock("../src/lib/supabase", () => ({
           mock.tables[table].push(row);
           return { data: row, error: null };
         }
-        const rows = (mock.tables[table] || []).filter((r) =>
+        let rows = (mock.tables[table] || []).filter((r) =>
           Object.entries(filters).every(([k, v]) => r[k] === v),
         );
+        if (before)
+          rows = rows.filter((r) => Number(r[before!.key]) < before!.value);
+        if (table === "messages")
+          rows = rows
+            .slice()
+            .sort((a, b) =>
+              descending
+                ? Number(b.seq) - Number(a.seq)
+                : Number(a.seq) - Number(b.seq),
+            );
+        rows = rows.slice(0, maxRows);
         return { data: single ? (rows[0] ?? null) : rows, error: null };
       };
       const builder = {
         select: () => builder,
-        order: () => builder,
+        order: (_key: string, options?: { ascending?: boolean }) => {
+          descending = options?.ascending === false;
+          return builder;
+        },
+        limit: (value: number) => {
+          maxRows = value;
+          return builder;
+        },
+        lt: (key: string, value: number) => {
+          before = { key, value };
+          return builder;
+        },
         range: () => builder,
         eq: (k: string, v: unknown) => {
           filters = { ...filters, [k]: v };
@@ -107,6 +133,7 @@ beforeEach(() => {
   mock.clearAuth();
   mock.setSession(null);
   mock.sent = [];
+  mock.failFetch = false;
   window.location.hash = "/chat";
   for (const key of Object.keys(mock.tables)) delete mock.tables[key];
   mock.tables.models = modelCatalog.slice(0, 2);
@@ -124,6 +151,7 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (_url: string, init: RequestInit) => {
+      if (mock.failFetch) throw new Error("Sin conexión");
       const body = JSON.parse(String(init.body));
       mock.sent.push(body);
       mock.tables.messages.push(
@@ -273,5 +301,62 @@ describe("Flujo UI completo con proveedor simulado", () => {
     expect((send as HTMLButtonElement).disabled).toBe(true);
     fireEvent.submit(send.closest("form")!);
     await waitFor(() => expect(mock.sent).toHaveLength(0));
+  });
+  it("conserva el mensaje cuando falla la red y permite recuperarlo sin crear otro chat", async () => {
+    const user = userEvent.setup();
+    mock.setSession({
+      access_token: "user-token",
+      user: { id: "u1", email: "test@example.com" },
+    });
+    mock.failFetch = true;
+    mount();
+    const editor = await screen.findByRole("textbox", { name: "Mensaje" });
+    await user.type(editor, "Este mensaje no debe perderse");
+    await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
+    await screen.findByText(/Tu mensaje sigue en el editor/);
+    expect(
+      (screen.getByRole("textbox", { name: "Mensaje" }) as HTMLTextAreaElement)
+        .value,
+    ).toBe("Este mensaje no debe perderse");
+    expect(mock.tables.conversations).toHaveLength(1);
+    mock.failFetch = false;
+    await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
+    await screen.findByText("Hola desde el proveedor simulado");
+    expect(mock.tables.conversations).toHaveLength(1);
+    expect(mock.sent).toHaveLength(1);
+    cleanup();
+    mount();
+    const recovered = await screen.findByRole("textbox", { name: "Mensaje" });
+    expect((recovered as HTMLTextAreaElement).value).toBe("");
+  });
+  it("carga primero mensajes recientes y permite recuperar los anteriores en orden", async () => {
+    const user = userEvent.setup();
+    mock.setSession({
+      access_token: "user-token",
+      user: { id: "u1", email: "test@example.com" },
+    });
+    mock.tables.conversations = [
+      { id: "old-chat", title: "Historial largo", model_id: defaultModel },
+    ];
+    mock.tables.messages = Array.from({ length: 60 }, (_, i) => ({
+      id: `m-${i + 1}`,
+      conversation_id: "old-chat",
+      role: i % 2 ? "assistant" : "user",
+      content: `Mensaje histórico ${i + 1}`,
+      status: "complete",
+      seq: i + 1,
+    }));
+    window.location.hash = "/chat/old-chat";
+    mount();
+    await screen.findByText("Mensaje histórico 60");
+    expect(screen.queryByText("Mensaje histórico 1")).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Cargar mensajes anteriores" }),
+    );
+    await screen.findByText("Mensaje histórico 1");
+    expect(document.querySelectorAll(".message")).toHaveLength(60);
+    expect(document.querySelector(".message")?.textContent).toContain(
+      "Mensaje histórico 1",
+    );
   });
 });

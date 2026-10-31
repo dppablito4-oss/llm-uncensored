@@ -21,21 +21,30 @@ export async function* providerEvents(
               : "PROVIDER_ERROR",
     );
   if (!response.body) throw new Error("EMPTY_STREAM");
-  let done = false;
+  let done = false,
+    limited = false,
+    hasText = false;
   for await (const raw of sseData(response.body, signal)) {
     if (raw === "[DONE]") {
       done = true;
-      yield { done: true };
+      if (!limited && hasText) yield { done: true };
       break;
     }
     const event = JSON.parse(raw);
     if (event.error) throw new Error("PROVIDER_STREAM_ERROR");
     if (event.usage) yield { usage: event.usage };
     const choice = event.choices?.[0];
-    if (choice?.delta?.content) yield { text: choice.delta.content };
+    if (choice?.delta?.content) {
+      hasText = true;
+      yield { text: choice.delta.content };
+    }
     if (choice?.finish_reason === "error")
       throw new Error("PROVIDER_STREAM_ERROR");
-    if (choice?.finish_reason === "length") throw new Error("OUTPUT_LIMIT");
+    // The usage chunk often follows finish_reason. Read it before settling
+    // truncated responses so reasoning tokens are counted accurately too.
+    if (choice?.finish_reason === "length") limited = true;
   }
+  if (limited) throw new Error("OUTPUT_LIMIT");
   if (!done) throw new Error("INCOMPLETE_STREAM");
+  if (!hasText) throw new Error("EMPTY_STREAM");
 }

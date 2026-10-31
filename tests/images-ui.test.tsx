@@ -11,6 +11,8 @@ vi.mock("../src/services/images", () => ({
   generateImage: mock.generate,
   listImages: mock.list,
   downloadImage: vi.fn(),
+  deleteImage: vi.fn(),
+  imagePageSize: 24,
 }));
 beforeEach(() => {
   mock.generate.mockReset().mockResolvedValue("image-id");

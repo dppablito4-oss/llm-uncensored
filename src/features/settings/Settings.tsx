@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { Download, Trash2, Moon, Sun } from "lucide-react";
 import { useData, useRefresh } from "../../hooks/useData";
+import { useUsage } from "../../hooks/useUsage";
 import { change, list, remove } from "../../services/data";
 import { useUI } from "../../stores/ui";
 import { download } from "../../lib/utils";
 import { Button } from "../../components/ui/button";
 import { ModelInfo } from "../../components/ModelInfo";
-import { modelPrice } from "../../../shared/models";
-import type { Profile, Preset, Model, Usage, Conversation } from "../../types";
+import { modelPrice, reasoningLevels, findModel } from "../../../shared/models";
+import type { Profile, Preset, Model, Conversation } from "../../types";
 export function Settings() {
   const { data: profiles = [], error } = useData<Profile>("profiles");
   const { data: models = [] } = useData<Model>("models", "id");
   const { data: presets = [] } = useData<Preset>("presets");
-  const { data: usage = [] } = useData<Usage>("usage_events");
+  const { data: usage, error: usageError } = useUsage();
   const profile = profiles[0],
     refresh = useRefresh();
   const { theme, setTheme } = useUI();
@@ -163,37 +164,73 @@ export function Settings() {
               </label>
             ))}
           </div>
+          <label>
+            Razonamiento predeterminado
+            <select
+              value={profile.reasoning_effort}
+              onChange={(e) => void patch({ reasoning_effort: e.target.value })}
+            >
+              {reasoningLevels.map((level) => (
+                <option
+                  key={level}
+                  value={level}
+                  disabled={
+                    level !== "auto" &&
+                    !(
+                      findModel(profile.default_model)?.reasoning_efforts || []
+                    ).includes(level)
+                  }
+                >
+                  {level === "auto" ? "Predeterminado del proveedor" : level}
+                </option>
+              ))}
+            </select>
+          </label>
           <ModelInfo id={profile.default_model} />
           <p className="muted">
             Los parámetros del preset tienen prioridad. El contexto usa un
             cálculo conservador por bytes UTF-8, con hasta 60 mensajes
-            recientes.
+            recientes. Los tokens de respuesta incluyen el razonamiento interno.
+            El nivel bajo ayuda a dejar espacio para la respuesta visible; el
+            preset activo tiene prioridad.
           </p>
         </article>
       )}
       <article className="settings-card">
         <h2>Uso del chat</h2>
+        {usageError && (
+          <p role="alert">
+            No se pudo consultar el consumo. Actualiza para reintentar.
+          </p>
+        )}
+        {usage && (
+          <>
+            <p>
+              Hoy: {usage.requests_today} de {usage.daily_requests} solicitudes
+              · {usage.tokens_today.toLocaleString()} de{" "}
+              {usage.daily_tokens.toLocaleString()} tokens.
+            </p>
+            <p className="muted">
+              La cuota se reinicia el{" "}
+              {new Date(usage.resets_at).toLocaleString()}.{" "}
+              {usage.reserved_today > 0
+                ? `${usage.reserved_today.toLocaleString()} tokens están reservados para solicitudes activas o con consumo sin confirmar.`
+                : "Las reservas se liberan al confirmar el consumo del proveedor."}
+            </p>
+          </>
+        )}
         <div className="stats">
           <div>
-            <strong>{usage.length}</strong>
+            <strong>{usage?.requests_total ?? "—"}</strong>
             <span>Solicitudes</span>
           </div>
           <div>
-            <strong>
-              {usage
-                .reduce((s, u) => s + u.input_tokens + u.output_tokens, 0)
-                .toLocaleString()}
-            </strong>
+            <strong>{usage?.tokens_total.toLocaleString() ?? "—"}</strong>
             <span>Tokens estimados / reportados</span>
           </div>
           <div>
-            <strong>
-              $
-              {usage
-                .reduce((s, u) => s + Number(u.estimated_cost_usd || 0), 0)
-                .toFixed(4)}
-            </strong>
-            <span>Costo estimado disponible</span>
+            <strong>${Number(usage?.cost_total ?? 0).toFixed(4)}</strong>
+            <span>Costo reportado disponible</span>
           </div>
         </div>
         <p className="muted">

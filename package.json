@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
@@ -10,7 +13,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:db": "supabase test db",
-    "test:e2e": "vitest run tests/app.test.tsx tests/edge.test.ts",
+    "test:integration": "vitest run tests/app.test.tsx tests/edge.test.ts",
+    "test:hosted:chat": "node scripts/smoke-chat-quota.mjs",
+    "test:hosted:gallery": "node scripts/smoke-gallery.mjs",
     "check:edge": "deno check --node-modules-dir=manual supabase/functions/chat-stream/index.ts supabase/functions/image-generate/index.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "verify:dist": "node scripts/verify-dist.mjs",

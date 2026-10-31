@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -17,11 +17,16 @@ import {
   ArrowUpRight,
   Brain,
 } from "lucide-react";
-import { supabase } from "../../lib/supabase";
+import {
+  allMessages,
+  messagePage,
+  messagePageSize,
+} from "../../services/messages";
 import { save, change } from "../../services/data";
 import { streamChat } from "../../services/chat";
 import { download } from "../../lib/utils";
 import { useData } from "../../hooks/useData";
+import { useUsage } from "../../hooks/useUsage";
 import { Button } from "../../components/ui/button";
 import { ModelInfo } from "../../components/ModelInfo";
 import { modelPrice } from "../../../shared/models";
@@ -63,10 +68,18 @@ function Markdown({ content }: { content: string }) {
     </ReactMarkdown>
   );
 }
-export function Chat() {
+export function Chat({ userId }: { userId: string }) {
   const { id } = useParams(),
     navigate = useNavigate(),
     client = useQueryClient();
+  const location = useLocation();
+  const recoveryState = (location.state || {}) as {
+    draftText?: string;
+    chatNotice?: string;
+    ownerId?: string;
+  };
+  const initial = recoveryState.ownerId === userId ? recoveryState : {};
+  const { data: usage } = useUsage();
   const { data: conversations = [] } = useData<Conversation>(
     "conversations",
     "updated_at",
@@ -78,14 +91,16 @@ export function Chat() {
     profile = profiles[0];
   const [model, setModel] = useState(""),
     [preset, setPreset] = useState(""),
-    [text, setText] = useState(""),
+    [text, setText] = useState(initial.draftText || ""),
     [draft, setDraft] = useState(""),
     [pendingUser, setPendingUser] = useState(""),
     [busy, setBusy] = useState(false),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(initial.chatNotice || "");
   const abort = useRef<AbortController | null>(null),
     scroll = useRef<HTMLDivElement>(null),
-    follow = useRef(true);
+    follow = useRef(true),
+    mounted = useRef(true),
+    previousHeight = useRef<number | null>(null);
   const selectedModel =
       model ||
       current?.model_id ||
@@ -99,29 +114,34 @@ export function Chat() {
           current?.preset_id ||
           (!id ? profile?.default_preset_id : "") ||
           "";
-  const query = useQuery({
+  const query = useInfiniteQuery({
     queryKey: ["messages", id],
     enabled: !!id,
-    queryFn: async () => {
-      const all: Message[] = [];
-      for (let offset = 0; ; offset += 500) {
-        const { data, error } = await supabase
-          .from("messages")
-          .select("*")
-          .eq("conversation_id", id!)
-          .order("seq")
-          .range(offset, offset + 499);
-        if (error) throw error;
-        all.push(...(data as Message[]));
-        if (data.length < 500) break;
-      }
-      return all;
-    },
+    initialPageParam: undefined as number | undefined,
+    queryFn: ({ pageParam }) => messagePage(id!, pageParam),
+    getNextPageParam: (page) =>
+      page.length === messagePageSize ? page.at(-1)!.seq : undefined,
   });
-  const messages = query.data || [];
-  useEffect(() => () => abort.current?.abort(), []);
+  const messages = (query.data?.pages.flat() || []).slice().reverse();
   useEffect(() => {
-    if (follow.current && scroll.current)
+    // Recovery data is consumed once so a later reload cannot resurrect an
+    // already-sent draft, and another signed-in user never sees it.
+    if (location.state)
+      navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, navigate]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      abort.current?.abort();
+    };
+  }, []);
+  useEffect(() => {
+    if (previousHeight.current !== null && scroll.current) {
+      scroll.current.scrollTop +=
+        scroll.current.scrollHeight - previousHeight.current;
+      previousHeight.current = null;
+    } else if (follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [draft, messages.length, pendingUser]);
   async function send(
@@ -129,7 +149,7 @@ export function Chat() {
     target?: Message,
     edited?: string,
   ) {
-    if (busy) return;
+    if (busy || abort.current) return;
     const content = edited ?? text;
     if (action !== "regenerate" && (!content.trim() || content.length > 12000))
       return;
@@ -137,12 +157,13 @@ export function Chat() {
     setBusy(true);
     setDraft("");
     setPendingUser(action === "regenerate" ? "" : content);
-    setText("");
     follow.current = true;
     const controller = new AbortController();
     abort.current = controller;
+    let cid = id,
+      accepted = false,
+      failureNotice = "";
     try {
-      let cid = id;
       if (!cid) {
         const created = await save("conversations", {
           title: content.slice(0, 80) || "Nueva conversación",
@@ -163,24 +184,43 @@ export function Chat() {
         },
         controller.signal,
         (event) => {
+          if (event.type === "accepted") {
+            accepted = true;
+            if (action === "send") setText("");
+          }
           if (event.type === "delta") setDraft((v) => v + (event.text || ""));
         },
       );
-      if (!id) navigate("/chat/" + cid);
+      accepted = true;
+      if (action === "send") setText("");
     } catch (error) {
-      setNotice(
-        controller.signal.aborted
-          ? "Generación detenida. El servidor guardará el texto disponible como parcial. Actualiza el historial en unos segundos."
-          : error instanceof Error
-            ? error.message
-            : "No se pudo generar la respuesta.",
-      );
+      failureNotice = controller.signal.aborted
+        ? "Generación detenida. El servidor guardará el texto disponible como parcial. Actualiza el historial en unos segundos."
+        : error instanceof Error
+          ? error.message
+          : "No se pudo generar la respuesta.";
+      if (!accepted && action === "send")
+        failureNotice +=
+          " Tu mensaje sigue en el editor. Revisa el historial antes de reenviarlo si hubo un corte de conexión.";
+      setNotice(failureNotice);
     } finally {
       setBusy(false);
       setPendingUser("");
       setDraft("");
       abort.current = null;
-      await client.invalidateQueries();
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["messages", cid] }),
+        client.invalidateQueries({ queryKey: ["conversations"] }),
+        client.invalidateQueries({ queryKey: ["usage-summary"] }),
+      ]);
+      if (!id && cid && mounted.current)
+        navigate("/chat/" + cid, {
+          state: {
+            ownerId: userId,
+            chatNotice: failureNotice,
+            draftText: !accepted && action === "send" ? content : "",
+          },
+        });
     }
   }
   async function selectPreset(value: string) {
@@ -200,24 +240,30 @@ export function Chat() {
     }
   }
   const presetValue = selectedPreset === "none" ? "" : selectedPreset;
-  function exportConversation(format: "json" | "md") {
-    download(
-      `conversacion.${format}`,
-      format === "json"
-        ? { conversation: current, messages }
-        : `# ${current?.title || "Conversación"}
+  async function exportConversation(format: "json" | "md") {
+    if (!id) return;
+    try {
+      const exported = await allMessages(id);
+      download(
+        `conversacion.${format}`,
+        format === "json"
+          ? { conversation: current, messages: exported }
+          : `# ${current?.title || "Conversación"}
 
 ` +
-            messages
-              .map(
-                (
-                  m,
-                ) => `## ${m.role === "user" ? "Tú" : "Forma"}${m.status === "partial" ? " (parcial)" : ""}
+              exported
+                .map(
+                  (
+                    m,
+                  ) => `## ${m.role === "user" ? "Tú" : "Forma"}${m.status === "partial" ? " (parcial)" : ""}
 
 ${m.content}`,
-              )
-              .join("\n\n"),
-    );
+                )
+                .join("\n\n"),
+      );
+    } catch {
+      setNotice("No se pudo exportar la conversación completa. Reintenta.");
+    }
   }
   return (
     <div className="chat-view">
@@ -264,14 +310,14 @@ ${m.content}`,
               <Button
                 variant="ghost"
                 aria-label="Exportar Markdown"
-                onClick={() => exportConversation("md")}
+                onClick={() => void exportConversation("md")}
               >
                 <Download size={16} />
                 <span className="desktop-label">Markdown</span>
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => exportConversation("json")}
+                onClick={() => void exportConversation("json")}
               >
                 JSON
               </Button>
@@ -334,6 +380,21 @@ ${m.content}`,
           </div>
         ) : (
           <div className="messages">
+            {query.hasNextPage && (
+              <Button
+                variant="ghost"
+                disabled={query.isFetchingNextPage}
+                onClick={() => {
+                  follow.current = false;
+                  previousHeight.current = scroll.current?.scrollHeight ?? null;
+                  void query.fetchNextPage();
+                }}
+              >
+                {query.isFetchingNextPage
+                  ? "Cargando…"
+                  : "Cargar mensajes anteriores"}
+              </Button>
+            )}
             {query.isLoading && (
               <p className="muted">Recuperando conversación…</p>
             )}
@@ -501,6 +562,9 @@ ${m.content}`,
           </div>
         </form>
         <p className="composer-note">
+          {usage
+            ? `${Math.max(0, usage.daily_tokens - usage.tokens_today).toLocaleString()} tokens disponibles hoy · ${usage.requests_today}/${usage.daily_requests} solicitudes · `
+            : ""}
           Forma puede equivocarse. Comprueba la información importante.
         </p>
       </div>

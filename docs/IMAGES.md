@@ -11,7 +11,7 @@ Los nombres e IDs se verificaron en el [catálogo oficial](https://nano-gpt.com/
 
 Texto a imagen, una imagen por solicitud, nueve resoluciones, 1–50 pasos, CFG 0–20 y semilla opcional entre 0 y 2147483647. Los valores iniciales son 1024×1024, 12 pasos y CFG 7.5. Una misma semilla no garantiza imágenes idénticas. No se implementa todavía edición de imágenes de referencia.
 
-La galería muestra las últimas 50 solicitudes con sus parámetros y estado. No se reintentan automáticamente solicitudes facturables. Si se interrumpe la conexión, actualiza la galería antes de generar de nuevo.
+La galería carga 24 solicitudes por página y permite cargar anteriores. La eliminación borra el archivo y reemplaza el prompt por `[Imagen eliminada]`; se conserva un registro oculto con modelo, parámetros y consumo, de modo que borrar una imagen no devuelve cuota ni permite eludir límites. Solo se eliminan generaciones terminadas o intentos de más de tres minutos. No se reintentan automáticamente solicitudes facturables. Si se interrumpe la conexión, actualiza la galería antes de generar de nuevo.
 
 El servidor reserva la solicitud antes de llamar al proveedor, verifica los modelos y tamaños permitidos y aplica una generación activa por usuario, 4 solicitudes por minuto y `forma.user_limits.daily_images` por día UTC (20 por defecto). Los intentos fallidos también cuentan, porque un error o una desconexión no demuestran ausencia de cargo. La reserva se identifica por usuario/request_id para evitar cobros duplicados del mismo envío.
 
@@ -23,7 +23,7 @@ El backend acepta solo PNG, JPEG y WebP, hasta 20 MB. No devuelve claves ni cuer
 
 ## Instalación y pruebas
 
-Para este proyecto se aplicó únicamente `supabase/migrations/202610300003_images.sql` sobre la instalación Forma existente y se desplegó `image-generate`. En una instalación nueva, `scripts/install-forma.mjs` incluye las tres migraciones dentro de su transacción. El proyecto alojado mantiene el historial de migraciones de la otra aplicación; no uses db reset ni migration repair.
+Para este proyecto se aplicaron el esquema de imágenes y la migración `20261031004538_image_gallery_management.sql` sobre la instalación Forma existente y se desplegó `image-generate`. En una instalación nueva, `scripts/install-forma.mjs` incluye las seis migraciones dentro de su transacción. El proyecto alojado mantiene el historial de migraciones de la otra aplicación; no uses db reset ni migration repair.
 
 ```bash
 supabase functions deploy image-generate --project-ref TU_PROJECT_REF

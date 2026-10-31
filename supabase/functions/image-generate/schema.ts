@@ -1,5 +1,8 @@
 import { z } from "npm:zod@4.6.7";
 import { imageModel } from "../../../shared/images.ts";
+export const deleteImageRequest = z
+  .object({ action: z.literal("delete"), id: z.uuid() })
+  .strict();
 
 export const imageRequest = z
   .object({

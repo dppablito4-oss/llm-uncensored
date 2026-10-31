@@ -12,6 +12,7 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   status: "complete" | "partial" | "error";
+  seq: number;
   created_at: string;
 };
 export type Preset = {
@@ -24,6 +25,7 @@ export type Preset = {
   max_tokens: number;
   model_id: string;
   memory_enabled: boolean;
+  reasoning_effort: string;
 };
 export type Memory = {
   id: string;
@@ -41,6 +43,7 @@ export type Profile = {
   max_tokens: number;
   context_tokens: number;
   memory_tokens: number;
+  reasoning_effort: string;
 };
 export type Model = { id: string; name: string };
 export type Usage = {

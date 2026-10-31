@@ -8,7 +8,19 @@ El modelo inicial es `z-ai/glm-5.3-flash-uncensored`. El catálogo contiene 41 m
 
 El selector aparece en chat, configuración y presets. Cada opción muestra tarifas en **USD por millón de tokens**. El panel desplegable muestra descripción oficial, contexto, salida máxima, capacidades y esfuerzos de razonamiento publicados. Los datos ausentes se muestran como sin publicar.
 
-GLM inicial: USD 0.20 de entrada y USD 0.80 de salida por millón, contexto de 1 048 576 y salida de hasta 32 768. Esta app limita el contexto a 24 000 y la salida a 8 192, respetando máximos inferiores del modelo. Envía texto, temperatura, Top P y máximo de salida. Las capacidades publicadas de visión/herramientas/razonamiento no significan que esas funciones adicionales estén implementadas en la interfaz.
+GLM inicial: USD 0.20 de entrada y USD 0.80 de salida por millón, contexto de 1 048 576 y salida de hasta 32 768. Esta app limita el contexto a 24 000 y la salida a 8 192, respetando máximos inferiores del modelo. El presupuesto inicial de salida es 4096. Envía texto, temperatura, Top P, máximo de salida y el esfuerzo de razonamiento compatible configurado. Visión y herramientas todavía no están implementadas.
+
+## Cuotas, contexto y longitud de respuesta
+
+Son tres límites distintos. La cuota diaria se consulta en Configuración y se reinicia a las 00:00 UTC. Antes de generar se reserva el contexto realmente enviado más la salida máxima; al terminar, los conteos completos reportados por NanoGPT reemplazan esa reserva. Si no se llamó al proveedor, la reserva se libera. Si se desconoce el consumo, sigue contando por prudencia.
+
+El presupuesto de contexto prioriza el mensaje actual, después memorias y pares completos de conversación reciente. Los turnos antiguos se recortan del contexto, pero permanecen en el historial y la exportación. Se usa una cota por bytes UTF-8, no un tokenizador exacto del modelo.
+
+El máximo de salida incluye razonamiento interno: un modelo puede gastar ese presupuesto antes de producir texto visible. Se usa `low` cuando el catálogo publica ese nivel. Configuración y presets permiten cambiarlo; `auto` conserva la decisión del proveedor. Si un nivel no existe en el modelo elegido se usa `low` o el primer nivel publicado; si no tiene niveles publicados no se envía el parámetro. El preset activo tiene prioridad sobre las preferencias globales.
+
+El parser sigue leyendo el uso después de `finish_reason: length` para contabilizar una respuesta truncada. No reintenta automáticamente una petición facturable. Un error explica si se agotó la cuota diaria, el contexto o la longitud de salida.
+
+Fuentes: [razonamiento y niveles por modelo](https://nano-gpt.com/blog/how-to-choose-ai-reasoning-effort), [soporte sobre límites y razonamiento](https://nano-gpt.com/support).
 
 Los precios son una instantánea fechada de lista. No presuponen descuentos o recargos de la cuenta. Se guarda `usage.cost` reportado por el proveedor; si falta permanece `null`.
 

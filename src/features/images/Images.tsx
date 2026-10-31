@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ImagePlus, Download, RefreshCw } from "lucide-react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { ImagePlus, Download, RefreshCw, Trash2 } from "lucide-react";
 import {
   imageModels,
   imageModel,
@@ -10,6 +10,8 @@ import {
   generateImage,
   listImages,
   downloadImage,
+  deleteImage,
+  imagePageSize,
   type ImageGeneration,
 } from "../../services/images";
 import { Button } from "../../components/ui/button";
@@ -24,12 +26,47 @@ export function Images() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const selected = imageModel(model)!;
-  const gallery = useQuery({
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const gallery = useInfiniteQuery({
     queryKey: ["image-generations"],
-    queryFn: listImages,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => listImages(pageParam),
+    getNextPageParam: (last, pages) =>
+      last.length === imagePageSize ? pages.length : undefined,
     refetchInterval: (query) =>
-      query.state.data?.some((row) => row.status === "running") ? 5000 : 300000,
+      query.state.data?.pages
+        .flat()
+        .some(
+          (row) =>
+            row.status === "running" &&
+            Date.now() - Date.parse(row.created_at) < 180000,
+        )
+        ? 5000
+        : 300000,
   });
+  const images = gallery.data?.pages.flat() || [];
+  async function erase(row: ImageGeneration) {
+    if (
+      !confirm(
+        "¿Eliminar el archivo y la descripción? El registro de consumo se conserva y la cuota usada no se devuelve.",
+      )
+    )
+      return;
+    setDeleting(row.id);
+    try {
+      await deleteImage(row.id);
+      setNotice("Imagen eliminada");
+      await gallery.refetch();
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar la imagen",
+      );
+    } finally {
+      setDeleting(null);
+    }
+  }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (busy || !prompt.trim()) return;
@@ -168,7 +205,8 @@ export function Images() {
         <div>
           <h2>Tu galería</h2>
           <p className="muted small">
-            Las últimas 50 solicitudes. Solo tú puedes acceder a tus imágenes.
+            Solo tú puedes acceder a tus imágenes. Carga páginas anteriores para
+            ver más.
           </p>
         </div>
         <Button variant="outline" onClick={() => void gallery.refetch()}>
@@ -177,18 +215,20 @@ export function Images() {
         </Button>
       </div>
       {gallery.isPending && <p className="muted">Cargando galería…</p>}
-      {!gallery.isPending && !gallery.data?.length && (
+      {!gallery.isPending && !images.length && (
         <p className="muted">Tu primera imagen empieza con una idea.</p>
       )}
       <div className="image-gallery">
-        {gallery.data?.map((row) => (
+        {images.map((row) => (
           <article key={row.id} className="image-result">
             {row.url ? (
               <img src={row.url} alt={row.prompt} loading="lazy" />
             ) : (
               <div className="image-placeholder">
                 {row.status === "running"
-                  ? "Generando… Actualiza en unos segundos."
+                  ? gallery.dataUpdatedAt - Date.parse(row.created_at) >= 180000
+                    ? "La generación no se confirmó. Actualiza o elimina este intento."
+                    : "Generando… Actualiza en unos segundos."
                   : row.status === "error"
                     ? "No se completó la imagen"
                     : "Vista previa no disponible. Actualiza la galería."}
@@ -215,11 +255,35 @@ export function Images() {
                     Descargar
                   </Button>
                 )}
+                {(row.status !== "running" ||
+                  gallery.dataUpdatedAt - Date.parse(row.created_at) >=
+                    180000) && (
+                  <Button
+                    variant="ghost"
+                    disabled={deleting !== null}
+                    aria-label="Eliminar imagen"
+                    onClick={() => void erase(row)}
+                  >
+                    <Trash2 size={14} />
+                    {deleting === row.id ? "Eliminando…" : "Eliminar"}
+                  </Button>
+                )}
               </div>
             </div>
           </article>
         ))}
       </div>
+      {gallery.hasNextPage && (
+        <Button
+          variant="outline"
+          disabled={gallery.isFetchingNextPage}
+          onClick={() => void gallery.fetchNextPage()}
+        >
+          {gallery.isFetchingNextPage
+            ? "Cargando…"
+            : "Cargar imágenes anteriores"}
+        </Button>
+      )}
     </section>
   );
 }

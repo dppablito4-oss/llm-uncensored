@@ -33,6 +33,24 @@ beforeAll(async () => {
   await db.exec(
     readFileSync("supabase/migrations/202610300003_images.sql", "utf8"),
   );
+  await db.exec(
+    readFileSync(
+      "supabase/migrations/20261031003417_chat_quota_accounting.sql",
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      "supabase/migrations/20261031004538_image_gallery_management.sql",
+      "utf8",
+    ),
+  );
+  await db.exec(
+    readFileSync(
+      "supabase/migrations/20261031004954_chat_response_budget.sql",
+      "utf8",
+    ),
+  );
   await db.exec("set search_path=forma,public");
   await db.query("insert into auth.users values($1,$2),($3,$4)", [
     a,
@@ -177,6 +195,10 @@ describe.sequential("Migración PostgreSQL real y aislamiento RLS", () => {
     await db.query("update user_limits set daily_images=1 where user_id=$1", [
       a,
     ]);
+    await db.query(
+      "update image_generations set deleted_at=now(),object_path=null,prompt='[Imagen eliminada]' where id=$1",
+      [imageId],
+    );
     await expect(
       db.query(sql, [a, crypto.randomUUID(), ...args.slice(2)]),
     ).rejects.toThrow(/DAILY_LIMIT/);
@@ -423,5 +445,128 @@ describe.sequential("Migración PostgreSQL real y aislamiento RLS", () => {
         [a, cid, model],
       ),
     ).rejects.toThrow(/TOKEN_LIMIT/);
+  });
+  it("mantiene una conversación de 12 turnos cobrando consumo confirmado en vez de máximos", async () => {
+    await db.query(
+      "update user_limits set requests_per_minute=100,daily_requests=100,daily_tokens=1000 where user_id=$1",
+      [b],
+    );
+    const conversation = (
+      await asUser<{ id: string }>(
+        b,
+        "insert into conversations(user_id,model_id) values($1,$2) returning id",
+        [b, model],
+      )
+    ).rows[0].id;
+    for (let turn = 0; turn < 12; turn++) {
+      const event = (
+        await db.query<{ id: string }>(
+          "select begin_generation($1,$2,gen_random_uuid(),'hola',$3,null,'send',null,200) as id",
+          [b, conversation, model],
+        )
+      ).rows[0].id;
+      await db.query("select prepare_generation($1,30,200)", [event]);
+      await db.query(
+        "select finish_generation($1,'respuesta','complete',15,5,null,null,true,true)",
+        [event],
+      );
+    }
+    const rows = (
+      await asUser<{ content: string }>(
+        b,
+        "select content from messages where conversation_id=$1",
+        [conversation],
+      )
+    ).rows;
+    expect(rows).toHaveLength(24);
+    const usage = (
+      await asUser<{
+        summary: {
+          tokens_today: number;
+          requests_today: number;
+          tokens_total: number;
+        };
+      }>(b, "select usage_summary() as summary")
+    ).rows[0].summary;
+    expect(usage).toMatchObject({
+      tokens_today: 240,
+      requests_today: 12,
+      tokens_total: 240,
+    });
+    await expect(
+      asUser(b, "select prepare_generation(gen_random_uuid(),10,100)"),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(
+        b,
+        "select finish_generation(gen_random_uuid(),'x','complete',0,0,null,null,true,false)",
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+  it("libera intentos previos al proveedor y conserva reservas con uso desconocido", async () => {
+    const conversation = (
+      await asUser<{ id: string }>(
+        b,
+        "insert into conversations(user_id,model_id) values($1,$2) returning id",
+        [b, model],
+      )
+    ).rows[0].id;
+    const begin = async () =>
+      (
+        await db.query<{ id: string }>(
+          "select begin_generation($1,$2,gen_random_uuid(),'hola',$3,null,'send',null,200) as id",
+          [b, conversation, model],
+        )
+      ).rows[0].id;
+    const noProvider = await begin();
+    // Reserving beyond the remaining quota must fail before an API call.
+    await expect(
+      db.query("select prepare_generation($1,900,200)", [noProvider]),
+    ).rejects.toThrow(/TOKEN_LIMIT/);
+    await db.query(
+      "select finish_generation($1,'','error',0,0,null,'TOKEN_LIMIT',false,false)",
+      [noProvider],
+    );
+    const unknown = await begin();
+    await db.query("select prepare_generation($1,30,200)", [unknown]);
+    await db.query(
+      "select finish_generation($1,'parcial','partial',30,7,null,'CANCELLED',false,true)",
+      [unknown],
+    );
+    expect(
+      (
+        await db.query<{ quota_tokens: number | null }>(
+          "select quota_tokens from usage_events where id=$1",
+          [unknown],
+        )
+      ).rows[0].quota_tokens,
+    ).toBeNull();
+    expect(
+      (
+        await db.query<{ quota_tokens: number }>(
+          "select quota_tokens from usage_events where id=$1",
+          [noProvider],
+        )
+      ).rows[0].quota_tokens,
+    ).toBe(0);
+    const usage = (
+      await asUser<{
+        summary: { tokens_today: number; reserved_today: number };
+      }>(b, "select usage_summary() as summary")
+    ).rows[0].summary;
+    expect(usage).toMatchObject({ tokens_today: 470, reserved_today: 230 });
+    // Finalization cannot be replayed to erase consumption or append output.
+    await db.query(
+      "select finish_generation($1,'duplicate','complete',0,0,null,null,true,false)",
+      [unknown],
+    );
+    expect(
+      (
+        await asUser<{ summary: { tokens_today: number } }>(
+          b,
+          "select usage_summary() as summary",
+        )
+      ).rows[0].summary.tokens_today,
+    ).toBe(470);
   });
 });

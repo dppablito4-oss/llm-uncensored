@@ -46,12 +46,15 @@ export async function generateImage(input: ImageInput) {
     throw new Error(result.error || "No se pudo generar la imagen");
   return result.id as string;
 }
-export async function listImages(): Promise<ImageGeneration[]> {
+export const imagePageSize = 24;
+export async function listImages(page = 0): Promise<ImageGeneration[]> {
   const { data, error } = await supabase
     .from("image_generations")
     .select("*")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .order("id", { ascending: false })
+    .range(page * imagePageSize, (page + 1) * imagePageSize - 1);
   if (error) throw error;
   return Promise.all(
     (data as ImageGeneration[]).map(async (row) => {
@@ -62,6 +65,29 @@ export async function listImages(): Promise<ImageGeneration[]> {
       return { ...row, url: signed.data?.signedUrl };
     }),
   );
+}
+export async function deleteImage(id: string) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Inicia sesión de nuevo");
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/image-generate`,
+    {
+      method: "POST",
+      headers: {
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "delete", id }),
+      signal: AbortSignal.timeout(30000),
+    },
+  );
+  if (!response.ok)
+    throw new Error(
+      (await response.json()).error || "No se pudo eliminar la imagen",
+    );
 }
 export async function downloadImage(row: ImageGeneration) {
   if (!row.object_path) return;

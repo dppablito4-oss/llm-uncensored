@@ -89,6 +89,23 @@ describe("Streaming real del protocolo", () => {
       ),
     ).rejects.toThrow("OUTPUT_LIMIT");
   });
+  it("conserva el uso que llega después del límite, incluyendo tokens de razonamiento", async () => {
+    const items: unknown[] = [];
+    await expect(
+      (async () => {
+        for await (const item of providerEvents(
+          response(
+            'data: {"choices":[{"finish_reason":"length"}]}\n\ndata: {"usage":{"prompt_tokens":50,"completion_tokens":2048}}\n\ndata: [DONE]\n\n',
+          ),
+          new AbortController().signal,
+        ))
+          items.push(item);
+      })(),
+    ).rejects.toThrow("OUTPUT_LIMIT");
+    expect(items).toEqual([
+      { usage: { prompt_tokens: 50, completion_tokens: 2048 } },
+    ]);
+  });
   it("cancela un lector bloqueado al abortar", async () => {
     let cancelled = false;
     const c = new AbortController();
@@ -198,6 +215,41 @@ describe("Validación y presupuesto", () => {
       ),
     ).toThrow();
     expect(tokenBound("🦊")).toBe(4);
+  });
+  it("prioriza el mensaje actual cuando memorias grandes compiten por contexto", () => {
+    const current = "necesito ayuda ".repeat(25);
+    const context = buildContext(
+      "sistema",
+      "preset",
+      ["m".repeat(800)],
+      [
+        { role: "user", content: "antes" },
+        { role: "assistant", content: "respuesta anterior" },
+        { role: "user", content: current },
+      ],
+      600,
+      1000,
+    );
+    expect(context.at(-1)?.content).toBe(current);
+    expect(
+      context.reduce((n, t) => n + tokenBound(t.content) + 32, 0),
+    ).toBeLessThanOrEqual(600);
+    expect(context[1].role).toBe("user");
+    expect(context[0].content).not.toContain("m".repeat(800));
+  });
+  it("recorta historial largo por pares sin comenzar con una respuesta huérfana", () => {
+    const history = Array.from({ length: 30 }, (_, i) => [
+      { role: "user", content: `pregunta ${i}` },
+      { role: "assistant", content: `respuesta ${i}` },
+    ]).flat();
+    history.push({ role: "user", content: "última pregunta" });
+    const context = buildContext("sistema", "", [], history, 250);
+    expect(context[1].role).toBe("user");
+    expect(context.at(-1)?.content).toBe("última pregunta");
+    expect(context.length).toBeLessThan(history.length);
+    expect(
+      context.reduce((n, t) => n + tokenBound(t.content) + 32, 0),
+    ).toBeLessThanOrEqual(250);
   });
 });
 

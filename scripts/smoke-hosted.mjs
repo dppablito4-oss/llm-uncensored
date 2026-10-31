@@ -1,7 +1,7 @@
 // Explicit integration check: creates two temporary confirmed users, runs one
 // short paid generation, and deletes both accounts and their data in finally.
 // Admin keys remain in memory; never print or write credentials.
-import { execFileSync } from "node:child_process";
+import { runSupabase } from "./supabase-cli.mjs";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
@@ -10,8 +10,7 @@ import { createClient } from "@supabase/supabase-js";
 const ref = readFileSync("supabase/.temp/project-ref", "utf8").trim();
 assert.equal(ref, process.argv[2], "Pass the exact linked project ref");
 const keys = JSON.parse(
-  execFileSync(
-    process.platform === "win32" ? "supabase.exe" : "supabase",
+  runSupabase(
     ["projects", "api-keys", "--project-ref", ref, "--output", "json"],
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   ),

@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
-import { imageRequest } from "./schema.ts";
+import { imageRequest, deleteImageRequest } from "./schema.ts";
 import { imageBucket } from "../../../shared/images.ts";
 
 async function limitedBody(
@@ -67,6 +67,10 @@ export async function imageHandler(
   };
   const json = (body: unknown, status = 200) =>
     Response.json(body, { status, headers });
+  const log = (phase: string, code: string, id?: string) =>
+    console.error(
+      JSON.stringify({ function: "image-generate", phase, code, event_id: id }),
+    );
   if (!origin || !origins.includes(origin))
     return json({ error: "Origen no autorizado" }, 403);
   if (req.method === "OPTIONS")
@@ -92,14 +96,79 @@ export async function imageHandler(
     } = await db.auth.getUser(auth.slice(7));
     if (error || !user)
       return json({ error: "Sesión inválida o caducada" }, 401);
-    let parsed;
+    let rawBody;
     try {
-      parsed = imageRequest.safeParse(
-        JSON.parse(new TextDecoder().decode(await limitedBody(req, 24000))),
+      rawBody = JSON.parse(
+        new TextDecoder().decode(await limitedBody(req, 24000)),
       );
     } catch {
       return json({ error: "Solicitud inválida o demasiado grande" }, 400);
     }
+    const admin = createClient(
+      required("SUPABASE_URL"),
+      required("SUPABASE_SERVICE_ROLE_KEY"),
+      { db: { schema: "forma" }, auth: { persistSession: false } },
+    );
+    if (rawBody?.action === "delete") {
+      const deletion = deleteImageRequest.safeParse(rawBody);
+      if (!deletion.success)
+        return json({ error: "Solicitud de eliminación inválida" }, 400);
+      const { data: row, error: lookupError } = await admin
+        .from("image_generations")
+        .select("id,object_path,status,created_at")
+        .eq("id", deletion.data.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (lookupError) {
+        log("delete", "LOOKUP_ERROR", deletion.data.id);
+        return json({ error: "No se pudo consultar la imagen" }, 502);
+      }
+      if (!row) return json({ error: "Imagen no encontrada" }, 404);
+      if (
+        row.status === "running" &&
+        Date.now() - Date.parse(row.created_at) < 180000
+      )
+        return json(
+          { error: "Espera a que termine la generación antes de eliminarla" },
+          409,
+        );
+      if (row.object_path) {
+        const { error: removeError } = await admin.storage
+          .from(imageBucket)
+          .remove([row.object_path]);
+        if (removeError) {
+          log("delete", "STORAGE_ERROR", row.id);
+          return json(
+            { error: "No se pudo eliminar el archivo. Reintenta." },
+            502,
+          );
+        }
+      }
+      const { error: deleteError } = await admin
+        .from("image_generations")
+        .update({
+          deleted_at: new Date().toISOString(),
+          object_path: null,
+          prompt: "[Imagen eliminada]",
+          ...(row.status === "running"
+            ? { status: "error", error_code: "GENERATION_TIMEOUT" }
+            : {}),
+        })
+        .eq("id", row.id)
+        .eq("user_id", user.id);
+      if (deleteError) {
+        log("delete", "PERSISTENCE_ERROR", row.id);
+        return json(
+          {
+            error:
+              "No se pudo confirmar la eliminación. Actualiza y reintenta.",
+          },
+          502,
+        );
+      }
+      return json({ id: row.id });
+    }
+    const parsed = imageRequest.safeParse(rawBody);
     if (!parsed.success)
       return json(
         { error: "Revisa el modelo, prompt, resolución y parámetros" },
@@ -107,11 +176,6 @@ export async function imageHandler(
       );
     const input = parsed.data;
     const key = required("LLM_UNC_API_KEY");
-    const admin = createClient(
-      required("SUPABASE_URL"),
-      required("SUPABASE_SERVICE_ROLE_KEY"),
-      { db: { schema: "forma" }, auth: { persistSession: false } },
-    );
     const { data: id, error: reserveError } = await admin.rpc(
       "begin_image_generation",
       {
@@ -199,7 +263,8 @@ export async function imageHandler(
         )
           ? raw
           : "GENERATION_ERROR";
-      await admin
+      log("generation", code, id);
+      const { error: finalizeError } = await admin
         .from("image_generations")
         .update({
           status: "error",
@@ -208,6 +273,7 @@ export async function imageHandler(
           object_path: objectPath,
         })
         .eq("id", id);
+      if (finalizeError) log("persistence", "FINALIZE_FAILED", id);
       return json(
         {
           error:
@@ -221,6 +287,7 @@ export async function imageHandler(
       );
     }
   } catch {
+    log("handler", "UNEXPECTED_ERROR");
     return json(
       { error: "Error de configuración del servidor de imágenes" },
       500,

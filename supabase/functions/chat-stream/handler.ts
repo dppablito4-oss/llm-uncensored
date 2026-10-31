@@ -7,12 +7,13 @@ import {
 } from "../../../shared/context.ts";
 import { encodeEvent } from "../../../shared/sse.ts";
 import { providerEvents } from "../../../shared/provider.ts";
-import { findModel } from "../../../shared/models.ts";
+import { findModel, modelReasoning } from "../../../shared/models.ts";
 
 const messages: Record<string, string> = {
   RATE_LIMIT: "Demasiadas solicitudes. Espera un minuto.",
   DAILY_LIMIT: "Alcanzaste tu límite diario de solicitudes.",
-  TOKEN_LIMIT: "No queda suficiente presupuesto diario de tokens.",
+  TOKEN_LIMIT:
+    "Tu cuota diaria no alcanza para este contexto y la respuesta solicitada. Puedes reducir los tokens de respuesta o esperar al reinicio a las 00:00 UTC. Revisa el consumo en Configuración.",
   MODEL_NOT_ALLOWED: "Este modelo no está autorizado.",
   MODEL_UNAVAILABLE:
     "El modelo no está disponible en NanoGPT. Selecciona otro modelo autorizado.",
@@ -27,7 +28,7 @@ const messages: Record<string, string> = {
   CONTEXT_LIMIT:
     "El mensaje y las instrucciones superan el presupuesto de contexto. Reduce el texto o amplía el presupuesto en ajustes.",
   OUTPUT_LIMIT:
-    "La respuesta alcanzó el límite de tokens; se guardó como parcial.",
+    "La respuesta alcanzó su longitud máxima y se guardó como parcial. Puedes aumentar los tokens de respuesta en el preset activo o en Configuración y regenerarla. Esto no significa que se haya agotado tu cuota diaria.",
 };
 export async function handler(
   req: Request,
@@ -51,8 +52,22 @@ export async function handler(
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     Vary: "Origin",
   };
-  const json = (error: string, status: number) =>
-    Response.json({ error }, { status, headers: cors });
+  const json = (error: string, status: number, code?: string) =>
+    Response.json(
+      { error, ...(code ? { code } : {}) },
+      { status, headers: cors },
+    );
+  let requestId: string | undefined;
+  const log = (phase: string, code: string, eventId?: string) =>
+    console.error(
+      JSON.stringify({
+        function: "chat-stream",
+        phase,
+        code,
+        request_id: requestId,
+        event_id: eventId,
+      }),
+    );
   if (!origin || !origins.includes(origin))
     return json("Origen no autorizado", 403);
   if (req.method === "OPTIONS")
@@ -108,6 +123,7 @@ export async function handler(
     }
     if (!payload.success) return json("Solicitud no válida", 400);
     const input = payload.data;
+    requestId = input.request_id;
     const admin = createClient(
       required("SUPABASE_URL"),
       required("SUPABASE_SERVICE_ROLE_KEY"),
@@ -160,7 +176,9 @@ export async function handler(
         p_preset: input.preset_id,
         p_action: input.action,
         p_target: input.target_id ?? null,
-        p_reserve: contextBudget + maxTokens,
+        // Reserve output first; prepare_generation adds the actual context
+        // under the same quota lock before any provider call can happen.
+        p_reserve: maxTokens,
       },
     );
     if (reserveError) {
@@ -174,6 +192,7 @@ export async function handler(
           code === "DAILY_LIMIT"
           ? 429
           : 409,
+        code,
       );
     }
     const controller = new AbortController();
@@ -190,7 +209,10 @@ export async function handler(
       outputTokens = 0,
       cost: number | null = null,
       status = "partial",
-      errorCode: string | null = null;
+      errorCode: string | null = null,
+      providerStarted = false,
+      inputReported = false,
+      outputReported = false;
     const stream = new ReadableStream<Uint8Array>({
       async start(sink) {
         const send = (data: unknown) => {
@@ -202,6 +224,11 @@ export async function handler(
             }
           }
         };
+        send({
+          type: "accepted",
+          conversation_id: input.conversation_id,
+          request_id: input.request_id,
+        });
         try {
           const { data: history, error: historyError } = await db
             .from("messages")
@@ -239,6 +266,22 @@ export async function handler(
             (sum, m) => sum + tokenBound(m.content) + 32,
             0,
           );
+          const { error: prepareError } = await admin.rpc(
+            "prepare_generation",
+            {
+              p_event: event,
+              p_input: inputTokens,
+              p_max_output: maxTokens,
+            },
+          );
+          if (prepareError)
+            throw new Error(
+              prepareError.message.includes("TOKEN_LIMIT")
+                ? "TOKEN_LIMIT"
+                : "RESERVATION_ERROR",
+            );
+          controller.signal.throwIfAborted();
+          providerStarted = true;
           const response = await fetch(
             "https://nano-gpt.com/api/v1/chat/completions",
             {
@@ -256,6 +299,17 @@ export async function handler(
                 max_tokens: maxTokens,
                 temperature: preset?.temperature ?? profile.temperature,
                 top_p: preset?.top_p ?? profile.top_p,
+                ...(modelReasoning(
+                  input.model_id,
+                  preset?.reasoning_effort ?? profile.reasoning_effort,
+                )
+                  ? {
+                      reasoning_effort: modelReasoning(
+                        input.model_id,
+                        preset?.reasoning_effort ?? profile.reasoning_effort,
+                      ),
+                    }
+                  : {}),
               }),
             },
           );
@@ -269,10 +323,20 @@ export async function handler(
               send({ type: "delta", text: item.text });
             }
             if (item.usage) {
-              if (Number.isFinite(item.usage.prompt_tokens))
-                inputTokens = Math.max(0, item.usage.prompt_tokens!);
-              if (Number.isFinite(item.usage.completion_tokens))
-                outputTokens = Math.max(0, item.usage.completion_tokens!);
+              if (
+                Number.isInteger(item.usage.prompt_tokens) &&
+                item.usage.prompt_tokens! >= 0
+              ) {
+                inputTokens = item.usage.prompt_tokens!;
+                inputReported = true;
+              }
+              if (
+                Number.isInteger(item.usage.completion_tokens) &&
+                item.usage.completion_tokens! >= 0
+              ) {
+                outputTokens = item.usage.completion_tokens!;
+                outputReported = true;
+              }
               if (Number.isFinite(item.usage.cost))
                 cost = Math.max(0, item.usage.cost!);
             }
@@ -292,6 +356,8 @@ export async function handler(
             "OUTPUT_LIMIT",
             "HISTORY_ERROR",
             "MEMORY_ERROR",
+            "TOKEN_LIMIT",
+            "RESERVATION_ERROR",
           ];
           errorCode = controller.signal.aborted
             ? "CANCELLED"
@@ -301,10 +367,12 @@ export async function handler(
                 ? "CONTEXT_LIMIT"
                 : "UNEXPECTED_ERROR";
           status = full ? "partial" : "error";
+          log("generation", errorCode, event);
         } finally {
           clearTimeout(timeout);
           req.signal.removeEventListener("abort", abort);
-          if (!outputTokens) outputTokens = tokenBound(full);
+          if (!providerStarted) inputTokens = 0;
+          if (!outputReported) outputTokens = tokenBound(full);
           const { error: persistError } = await admin.rpc("finish_generation", {
             p_event: event,
             p_content: full,
@@ -313,18 +381,25 @@ export async function handler(
             p_output: outputTokens,
             p_cost: cost,
             p_error: errorCode,
+            p_usage_reported: inputReported && outputReported,
+            p_provider_started: providerStarted,
           });
           if (persistError) {
+            log("persistence", "FINALIZE_FAILED", event);
             send({
               type: "error",
+              code: "PERSISTENCE_ERROR",
               message:
                 "No se pudo confirmar el guardado. Actualiza el historial antes de reenviar.",
             });
           } else if (errorCode)
             send({
               type: "error",
+              code: errorCode,
               message:
-                messages[errorCode] ||
+                (errorCode === "OUTPUT_LIMIT" && !full
+                  ? "El modelo agotó los tokens de salida antes de producir una respuesta visible. Reduce el razonamiento o aumenta los tokens de respuesta en el preset activo o en Configuración y regenera. Tu cuota diaria no está necesariamente agotada."
+                  : messages[errorCode]) ||
                 "Generación interrumpida. La respuesta disponible se guardó como parcial.",
             });
           else send({ type: "done", status });
@@ -348,6 +423,7 @@ export async function handler(
       },
     });
   } catch {
+    log("handler", "UNEXPECTED_ERROR");
     return json(
       "Error de configuración del servidor. Revisa los secretos de Supabase.",
       500,

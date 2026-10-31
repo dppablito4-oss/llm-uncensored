@@ -17,7 +17,12 @@ import { Button } from "../../components/ui/button";
 import { Modal } from "../../components/ui/dialog";
 import type { Preset, Model } from "../../types";
 import { ModelInfo } from "../../components/ModelInfo";
-import { defaultModel, modelPrice } from "../../../shared/models";
+import {
+  defaultModel,
+  modelPrice,
+  reasoningLevels,
+  findModel,
+} from "../../../shared/models";
 import { useWatch } from "react-hook-form";
 export const presetSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -28,6 +33,7 @@ export const presetSchema = z.object({
   top_p: z.number().min(0).max(1),
   max_tokens: z.number().int().min(64).max(8192),
   memory_enabled: z.boolean(),
+  reasoning_effort: z.enum(reasoningLevels).default("low"),
 });
 const initial = {
   name: "",
@@ -36,8 +42,9 @@ const initial = {
   model_id: defaultModel,
   temperature: 0.7,
   top_p: 1,
-  max_tokens: 2048,
+  max_tokens: 4096,
   memory_enabled: true,
+  reasoning_effort: "low" as const,
 };
 export function Presets() {
   const { data = [], error } = useData<Preset>("presets");
@@ -51,14 +58,18 @@ export function Presets() {
     reset,
     control,
     formState: { errors, isSubmitting },
-  } = useForm<z.infer<typeof presetSchema>>({
+  } = useForm<
+    z.input<typeof presetSchema>,
+    unknown,
+    z.output<typeof presetSchema>
+  >({
     resolver: zodResolver(presetSchema),
     defaultValues: initial,
   });
   const selectedModel = useWatch({ control, name: "model_id" });
   function edit(p: Preset | null) {
     setEditing(p);
-    reset(p || initial);
+    reset(presetSchema.parse(p || initial));
   }
   async function run(fn: () => Promise<unknown>) {
     try {
@@ -241,6 +252,30 @@ export function Presets() {
               {...register("max_tokens", { valueAsNumber: true })}
             />
           </label>
+          <label>
+            Razonamiento
+            <select {...register("reasoning_effort")}>
+              {reasoningLevels.map((level) => (
+                <option
+                  key={level}
+                  value={level}
+                  disabled={
+                    level !== "auto" &&
+                    !(
+                      findModel(selectedModel)?.reasoning_efforts || []
+                    ).includes(level)
+                  }
+                >
+                  {level === "auto" ? "Predeterminado del proveedor" : level}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted small">
+            Los tokens de respuesta incluyen el razonamiento interno del modelo.
+            Un nivel bajo deja más espacio para la respuesta visible. Si cambias
+            de modelo, se utiliza un nivel compatible.
+          </p>
           <label className="check">
             <input type="checkbox" {...register("memory_enabled")} />
             Usar memoria

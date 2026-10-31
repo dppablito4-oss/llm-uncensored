@@ -13,7 +13,7 @@ npx supabase link --project-ref TU_PROJECT_REF
 node scripts/install-forma.mjs TU_PROJECT_REF
 ```
 
-Adem?s se agreg? `forma.image_generations` y el bucket privado `forma-images`; consulta [IMAGES.md](IMAGES.md). El instalador comprueba el proyecto vinculado y ejecuta las tres migraciones SQL en una transacción. Falla si `forma` ya existe. No borra ni reinstala datos. En el proyecto compartido no uses `db push`, `db reset` ni `migration repair`: conserva el historial de la otra aplicación.
+Además se agregó `forma.image_generations` y el bucket privado `forma-images`; consulta [IMAGES.md](IMAGES.md). El instalador comprueba el proyecto vinculado y ejecuta las seis migraciones SQL en una transacción. Falla si `forma` ya existe. No borra ni reinstala datos. En el proyecto compartido no uses `db push`, `db reset` ni `migration repair`: conserva el historial de la otra aplicación.
 
 Expón `forma` en la Data API conservando todos los esquemas existentes. En este proyecto se verificó la lista anterior `public,graphql_public` y se amplió mediante configuración PostgreSQL:
 
@@ -29,7 +29,7 @@ En otro proyecto lee primero la lista expuesta. Este ajuste por rol puede preval
 
 `.env.local`, excluido de Git, solo contiene `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`. Esta app usa Vite, no variables `NEXT_PUBLIC_*`. La clave publishable está sujeta a permisos y RLS.
 
-Secretos Edge: `LLM_UNC_API_KEY` y `FORMA_ALLOWED_ORIGINS`. Los orígenes son exactos, separados por comas, sin rutas ni barra final. Se configuraron `http://localhost:5173`, `http://127.0.0.1:5173` y `https://dppablito4-oss.github.io`. El nombre específico de CORS evita modificar otras funciones.
+Secretos Edge: `LLM_UNC_API_KEY` y `FORMA_ALLOWED_ORIGINS`. Los orígenes son exactos, separados por comas, sin rutas ni barra final. Se configuraron `http://localhost:5173`, `http://127.0.0.1:5173`, `https://dppablito4-oss.github.io` y `https://chat.sypablitodp.site`. El nombre específico de CORS evita modificar otras funciones.
 
 ```bash
 npx supabase functions deploy chat-stream --project-ref TU_PROJECT_REF
@@ -42,6 +42,25 @@ Se conserva `verify_jwt = true` y la función además verifica el token contra A
 Añade las redirecciones de esta app a Auth conservando las anteriores. No sustituyas la Site URL de la otra aplicación sin revisar el impacto. PKCE requiere abrir los enlaces en el navegador donde se inició la solicitud. Login y bootstrap fueron probados en producción; los correos reales quedan pendientes.
 
 Solo el administrador modifica cuotas en `forma.user_limits` o habilita modelos en `forma.models`.
+
+Las correcciones incrementales son `20261031003417_chat_quota_accounting.sql`, `20261031004538_image_gallery_management.sql` y `20261031004954_chat_response_budget.sql`. Ya se aplicaron al proyecto conectado. En otra instalación existente, aplica únicamente las pendientes, en ese orden, con `supabase db query --linked --file RUTA`, después de verificar el proyecto vinculado. No vuelvas a ejecutar el instalador completo.
+
+`prepare_generation` ajusta la reserva al contexto preparado antes de llamar al proveedor. `finish_generation` usa los conteos reportados cuando están disponibles, libera los intentos anteriores al proveedor y mantiene las reservas inciertas. Todas las modificaciones de cuotas bloquean primero la misma fila de `user_limits`. `usage_summary` agrega estadísticas con permisos del usuario y RLS.
+
+La salida inicial subió de 2048 a 4096 tokens. Se actualizaron los perfiles que seguían en 2048 y los tres presets originales que conservaban su prompt y presupuesto de fábrica. Los presets personalizados conservan su presupuesto. El razonamiento usa `low` cuando es compatible.
+
+Los handlers registran fase, código e identificadores en logs estructurados; no registran prompts, respuestas, JWT ni claves. Las generaciones de chat obsoletas se cierran al iniciar otra solicitud, conservando su reserva desconocida. La galería deja de sondear indefinidamente los intentos antiguos y permite eliminarlos.
+
+## Pruebas alojadas reproducibles
+
+Con Node de `.nvmrc` y la CLI autenticada:
+
+```bash
+npm exec --package=supabase -- node scripts/smoke-chat-quota.mjs TU_PROJECT_REF
+npm exec --package=supabase -- node scripts/smoke-gallery.mjs TU_PROJECT_REF
+```
+
+El primer comando realiza inferencia facturada con cuentas temporales, diez turnos cortos y un turno con historial largo. El segundo usa un PNG mínimo, sin inferencia, para probar borrado privado, conservación del evento de cuota y rechazo entre usuarios. Ambos limpian sus cuentas en `finally`. Las claves administrativas se mantienen en memoria. Si la CLI npm no se detecta en PATH, configura `SUPABASE_CLI_ENTRY` con la ruta a su `dist/supabase.js`.
 
 `npm run check:supabase` es de solo lectura. La prueba explícita `node --env-file=.env.local scripts/smoke-hosted.mjs TU_PROJECT_REF` crea dos cuentas temporales, comprueba RLS y ejecuta una generación corta facturada; elimina las cuentas en `finally`. Las claves administrativas de la CLI permanecen en memoria.
 

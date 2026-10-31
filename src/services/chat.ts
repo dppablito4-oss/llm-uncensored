@@ -1,10 +1,13 @@
 import { supabase } from "../lib/supabase";
 import { sseData } from "../../shared/sse";
 export type ChatEvent = {
-  type: "delta" | "done" | "error";
+  type: "accepted" | "delta" | "done" | "error";
   text?: string;
   status?: string;
   message?: string;
+  code?: string;
+  conversation_id?: string;
+  request_id?: string;
 };
 export async function streamChat(
   request: Record<string, unknown>,

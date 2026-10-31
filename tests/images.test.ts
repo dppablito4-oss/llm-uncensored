@@ -38,7 +38,10 @@ const request = (data: unknown = input(), origin = "https://allowed.test") =>
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 let authenticated = true,
   providerStatus = 200,
-  reserveError = false;
+  reserveError = false,
+  deleteOwner = true,
+  deleteRunning = false,
+  removed = 0;
 let finished: Record<string, unknown> | undefined,
   body: Record<string, unknown> | undefined;
 const png =
@@ -47,6 +50,9 @@ beforeEach(() => {
   authenticated = true;
   providerStatus = 200;
   reserveError = false;
+  deleteOwner = true;
+  deleteRunning = false;
+  removed = 0;
   finished = undefined;
   body = undefined;
   vi.stubGlobal(
@@ -73,7 +79,27 @@ beforeEach(() => {
       }
       if (path.includes("/storage/v1/object/forma-images/"))
         return json({ Key: "stored" });
+      if (
+        path.endsWith("/storage/v1/object/forma-images") &&
+        init?.method === "DELETE"
+      ) {
+        removed++;
+        return json([]);
+      }
       if (path.includes("/rest/v1/image_generations")) {
+        if (!init?.method || init.method === "GET") {
+          expect(new URL(path).searchParams.get("user_id")).toBe(`eq.${uid}`);
+          return json(
+            deleteOwner
+              ? {
+                  id,
+                  object_path: `${uid}/${id}.png`,
+                  status: deleteRunning ? "running" : "complete",
+                  created_at: new Date().toISOString(),
+                }
+              : null,
+          );
+        }
         finished = JSON.parse(String(init?.body));
         return json(null);
       }
@@ -83,6 +109,32 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe("Imagen NanoGPT, validación y frontera de secretos", () => {
+  it("elimina archivo y prompt propios manteniendo el evento de consumo", async () => {
+    const response = await imageHandler(request({ action: "delete", id }), env);
+    expect(response.status).toBe(200);
+    expect(removed).toBe(1);
+    expect(body).toBeUndefined();
+    expect(finished).toMatchObject({
+      object_path: null,
+      prompt: "[Imagen eliminada]",
+    });
+    expect(finished?.deleted_at).toBeTruthy();
+    expect(finished).not.toHaveProperty("cost_usd");
+  });
+  it("no elimina archivos ajenos ni generaciones todavía activas", async () => {
+    deleteOwner = false;
+    expect(
+      (await imageHandler(request({ action: "delete", id }), env)).status,
+    ).toBe(404);
+    expect(removed).toBe(0);
+    deleteOwner = true;
+    deleteRunning = true;
+    expect(
+      (await imageHandler(request({ action: "delete", id }), env)).status,
+    ).toBe(409);
+    expect(removed).toBe(0);
+    expect(finished).toBeUndefined();
+  });
   it("envía el ID real y parámetros, guarda el archivo y registra el costo", async () => {
     const response = await imageHandler(request(), env);
     expect(response.status).toBe(200);

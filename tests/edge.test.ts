@@ -17,7 +17,9 @@ let providerStatus = 200,
   owner = true,
   finish: Record<string, unknown> | undefined,
   providerBody: Record<string, unknown> | undefined,
-  reserveCount = 0;
+  reserveCount = 0,
+  prepareFails = false,
+  contextTooLarge = false;
 const json = (v: unknown, status = 200) =>
   new Response(JSON.stringify(v), {
     status,
@@ -48,6 +50,8 @@ beforeEach(() => {
   finish = undefined;
   providerBody = undefined;
   reserveCount = 0;
+  prepareFails = false;
+  contextTooLarge = false;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -73,7 +77,12 @@ beforeEach(() => {
         return json([{ content: "User likes concise answers" }]);
       if (u.includes("/rest/v1/messages"))
         return json([
-          { role: "user", content: "hola", status: "complete", seq: 1 },
+          {
+            role: "user",
+            content: contextTooLarge ? "x".repeat(12000) : "hola",
+            status: "complete",
+            seq: 1,
+          },
         ]);
       if (u.includes("/rpc/begin_generation")) {
         reserveCount++;
@@ -83,6 +92,10 @@ beforeEach(() => {
         finish = JSON.parse(String(init?.body));
         return json(null);
       }
+      if (u.includes("/rpc/prepare_generation"))
+        return prepareFails
+          ? json({ message: "TOKEN_LIMIT" }, 400)
+          : json(null);
       if (u === "https://nano-gpt.com/api/v1/chat/completions") {
         expect(new Headers(init?.headers).get("Authorization")).toBe(
           "Bearer PRIVATE_NANOGPT_SECRET",
@@ -116,6 +129,8 @@ describe("Edge handler con proveedor simulado y SDK Supabase real", () => {
       p_status: "complete",
       p_input: 10,
       p_output: 2,
+      p_usage_reported: true,
+      p_provider_started: true,
     });
     expect(providerBody).toMatchObject({
       model: defaultModel,
@@ -126,6 +141,26 @@ describe("Edge handler con proveedor simulado y SDK Supabase real", () => {
     );
     expect(text).not.toContain("PRIVATE_");
     expect(reserveCount).toBe(1);
+  });
+  it("un contexto imposible no llama al proveedor y libera su reserva", async () => {
+    contextTooLarge = true;
+    const response = await handler(req(input()), env);
+    const text = await response.text();
+    expect(text).toContain("CONTEXT_LIMIT");
+    expect(text).toContain('"type":"accepted"');
+    expect(providerBody).toBeUndefined();
+    expect(finish).toMatchObject({
+      p_status: "error",
+      p_provider_started: false,
+      p_usage_reported: false,
+    });
+  });
+  it("valida la reserva real antes de generar y distingue la cuota diaria", async () => {
+    prepareFails = true;
+    const text = await (await handler(req(input()), env)).text();
+    expect(text).toContain("TOKEN_LIMIT");
+    expect(providerBody).toBeUndefined();
+    expect(finish?.p_provider_started).toBe(false);
   });
   it("rechaza origen ajeno antes de acceso al proveedor", async () => {
     expect(

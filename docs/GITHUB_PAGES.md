@@ -29,13 +29,12 @@ El workflow valida, prueba y compila aunque falten variables públicas. En ese c
 
 - Comprueba la URL retornada por Actions y que los assets no respondan 404.
 - Añade el origen exacto de Pages a `FORMA_ALLOWED_ORIGINS` de Supabase.
-- Configura Site URL/Redirect URLs de Auth incluyendo `/llm-uncensored/`.
+- Añade Redirect URLs de Auth con `/` para el dominio propio y localhost actuales; usa `/llm-uncensored/` si publicas sin CNAME. Conserva las redirecciones de otras aplicaciones del proyecto compartido.
 - Registra una cuenta, confirma correo, inicia sesión y prueba un stream real.
 - Abre el historial en una segunda sesión y confirma persistencia.
 
-El workflow se entrega preparado, pero su ejecución remota y publicación necesitan acceso al repositorio y tu configuración externa.
-
+Pages y las variables públicas están configurados en este repositorio. Los nuevos cambios se publican al pasar la validación de `main`.
 
 ## Dominio personalizado
 
-CNAME contiene `chat.sypablitodp.site`. El dominio apunta a GitHub Pages y usa HTTPS. La compilaci?n lee ese archivo, usa la ra?z para los assets y publica una copia en dist/CNAME. `verify:dist` comprueba el prefijo y la existencia de cada asset, adem?s de la coincidencia de CNAME.
+CNAME contiene `chat.sypablitodp.site`. El dominio apunta a GitHub Pages y usa HTTPS. La compilación lee ese archivo, usa la raíz para los assets y publica una copia en dist/CNAME. `verify:dist` comprueba el prefijo y la existencia de cada asset, además de la coincidencia de CNAME.

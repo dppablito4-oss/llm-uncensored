@@ -8,8 +8,8 @@ port = 54322
 major_version = 17
 [auth]
 enabled = true
-site_url = "http://localhost:5173/llm-uncensored/"
-additional_redirect_urls = ["http://localhost:5173/llm-uncensored/"]
+site_url = "http://localhost:5173/"
+additional_redirect_urls = ["http://localhost:5173/", "http://localhost:5173/llm-uncensored/"]
 [auth.email]
 enable_signup = true
 enable_confirmations = true

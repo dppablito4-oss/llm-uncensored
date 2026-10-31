@@ -4,9 +4,17 @@ import {
   defaultModel,
   findModel,
   modelPrice,
+  modelReasoning,
 } from "../shared/models";
 
 describe("Catálogo NanoGPT", () => {
+  it("aplica razonamiento bajo compatible sin enviar niveles inventados", () => {
+    expect(modelReasoning(defaultModel)).toBe("low");
+    expect(modelReasoning(defaultModel, "none")).toBe("low");
+    expect(modelReasoning(defaultModel, "high")).toBe("high");
+    expect(modelReasoning(defaultModel, "auto")).toBeUndefined();
+    expect(modelReasoning("invented")).toBeUndefined();
+  });
   it("incluye el modelo inicial, IDs únicos y precios en USD por millón", () => {
     expect(modelCatalog[0].id).toBe(defaultModel);
     expect(new Set(modelCatalog.map((model) => model.id)).size).toBe(

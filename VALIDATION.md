@@ -1,46 +1,46 @@
-# Validaci?n y despliegue
+# Validación y despliegue
 
-Fecha: 30 de octubre de 2026, America/Lima.
+Fecha de revisión: 30 de octubre de 2026, America/Bogota.
 
-## Publicaci?n
+## Estado
 
-App: https://chat.sypablitodp.site/ (GitHub Pages, HTTPS).
+La aplicación está alojada en https://chat.sypablitodp.site/ con GitHub Pages y HTTPS. El backend usa el proyecto `goegjuglstapjwcckawp`, nueve tablas de `forma` y el bucket privado `forma-images`. Las nuevas migraciones y ambas funciones Edge se desplegaron y comprobaron. La interfaz corregida se publica mediante el workflow Validate and deploy Pages, que ejecuta las validaciones antes de publicar. Las ejecuciones se consultan en [GitHub Actions](https://github.com/dppablito4-oss/llm-uncensored/actions/workflows/deploy.yml).
 
-Se habilit? Pages con GitHub Actions y las dos variables p?blicas VITE. El primer despliegue del chat pas? en https://github.com/dppablito4-oss/llm-uncensored/actions/runs/41123836855. Las redirecciones de Pages y localhost se a?adieron a Auth conservando la Site URL y las redirecciones anteriores de la otra aplicaci?n. Las claves privadas permanecen en Supabase.
+Se conservaron el historial de migraciones y las tablas de la otra aplicación del proyecto compartido. No se añadieron triggers a Auth ni se modificó su Site URL. Las claves privadas permanecen en Supabase.
 
-## Backend probado
+## Causa del bloqueo
 
-Proyecto goegjuglstapjwcckawp: nueve tablas en forma y bucket privado forma-images. Se conservan las 19 tablas originales y public.forma_connection_checks en public. Se expuso forma sin quitar public ni graphql_public. No se alter? el historial de migraciones ajeno ni se agregaron triggers de registro a Auth.
+La lógica anterior contabilizaba la reserva máxima como consumo permanente: 15 generaciones completadas acumulaban 210.720 tokens reservados frente a 26.409 tokens registrados. Además había dos errores `OUTPUT_LIMIT` con salida máxima de 2048 tokens y sin respuesta visible.
 
-chat-stream e image-generate est?n desplegadas con gateway JWT, validaci?n de sesi?n contra Auth y CORS espec?fico FORMA_ALLOWED_ORIGINS. Usan el secreto existente LLM_UNC_API_KEY sin guardarlo en el repo.
+Ahora se reserva la salida, se prepara y reserva el contexto realmente enviado, y los conteos reportados reemplazan la reserva al finalizar. Los errores anteriores al proveedor consumen cero tokens. Sin conteos completos se conserva la reserva. La migración ajustó las generaciones históricas completadas; las parciales o fallidas inciertas conservan su reserva.
 
-Pruebas alojadas realizadas con cuentas temporales:
+Se añadió razonamiento compatible con cada modelo, preferencia inicial `low` y salida inicial de 4096 tokens. Se actualizaron los perfiles que seguían en 2048 y los presets originales que conservaban nombre, prompt y presupuesto. Los presets personalizados mantienen su presupuesto. El parser recoge el uso que llega después del límite de salida.
 
-- Login, bootstrap idempotente, perfil, cuotas, tres presets y 41 modelos de texto.
-- RLS entre dos usuarios; las filas y los archivos del otro usuario no son accesibles.
-- GLM 5.3 Flash Uncensored: streaming, persistencia complete, 44 tokens de entrada, 8 de salida, USD 0.0000152 reportados.
-- Animagine XL 4.0 y Moxie Diffusion XL: una imagen de paisaje de 512?512 por modelo, USD 0.0034 cada una; persistencia y acceso firmado comprobados.
-- Los archivos y cuentas temporales se eliminaron al terminar.
+## Pruebas alojadas
 
-## Validaci?n local
+- Login, bootstrap, consulta de cuotas y aislamiento RLS con cuentas temporales.
+- Diez interacciones seguidas con GLM y cuota temporal de 30.000 tokens: todas visibles, completas y persistidas. Primera ejecución: 1247 tokens y USD 0,0002896 reportados.
+- Historial sintético de 40 mensajes, mayor que el presupuesto de contexto: con salida de 4096 se completó la respuesta, se conservaron los 42 mensajes y se contabilizaron 2403 tokens, USD 0,0004884 reportados. Una prueba inicial con salida artificial de 512 reprodujo `OUTPUT_LIMIT`, confirmando la diferencia entre contexto y longitud de salida.
+- Eliminación privada de un PNG mínimo: otro usuario recibe 404; el dueño elimina archivo y prompt, conserva el evento de consumo y deja de verlo en la galería. Sin inferencia de imágenes.
+- Cuentas eliminadas en `finally`. Consulta final: cero usuarios de las pruebas de cuotas y galería.
+- Advisors de seguridad, nivel error: sin hallazgos. Los avisos de rendimiento correspondían a políticas de la otra aplicación en `public`; no se modificaron.
 
-62 pruebas en 8 archivos pasan. Cubren selecci?n/cambio de modelos, tarifas, formularios de imagen, SSE, contexto, handler Edge, validaci?n de par?metros, errores privados, RLS, reservas, cuotas y PostgreSQL PGlite. ESLint, TypeScript, compilaci?n, Deno para las dos funciones y verify:dist pasan.
+Scripts reproducibles: `scripts/smoke-chat-quota.mjs` y `scripts/smoke-gallery.mjs`. El primero realiza inferencia facturada. Las claves administrativas permanecen en memoria.
 
-## Alcance y comprobaciones pendientes
+## Validación local
 
-El selector de texto tiene 41 modelos con precios y par?metros publicados. Solo GLM inicial tuvo inferencia real; los otros 40 se verificaron en cat?logo.
+Con Node 22.23.4 pasan 75 pruebas en ocho archivos, ESLint, TypeScript, compilación, Deno para ambas funciones y `verify:dist`. La versión mínima está declarada en `engines` y la probada en `.nvmrc`.
 
-Im?genes admite los dos modelos solicitados, una imagen por env?o, nueve tama?os, pasos/CFG/semilla, galer?a de 50 solicitudes recientes y descarga privada. Las cuotas se aplican en servidor. No incluye todav?a edici?n de imagen de referencia.
+Las regresiones cubren doce turnos sin consumir reservas máximas permanentes, uso desconocido, idempotencia, funciones privilegiadas, memorias grandes, historial por pares, uso tras truncamiento, niveles de razonamiento, recuperación del editor tras un corte, paginación de mensajes y eliminación privada de imágenes.
 
-Quedan pendientes correo real de confirmaci?n/recuperaci?n, prueba en Android y pgTAP con Docker. Las pruebas locales y las llamadas alojadas no sustituyen esas verificaciones.
+`npm audit --omit=dev` no reportó vulnerabilidades. La auditoría completa señaló avisos moderados en ESLint/minimatch; queda pendiente una actualización compatible, sin aplicar las degradaciones automáticas sugeridas por npm.
 
+## Pendientes y límites
 
-## Correcci?n de pantalla en blanco
-
-El dominio personalizado sirve desde la ra?z. Se corrigi? la base de Vite, antes /llm-uncensored/, que provocaba 404 en JavaScript/CSS. CNAME se incluye en el repositorio y en el artefacto de Pages. Se a?adi? una regresi?n del dominio y verificaci?n de archivos compilados. El dominio est? autorizado en CORS de ambas Edge Functions y en las redirecciones de Auth, conservando las direcciones anteriores. HTTPS est? habilitado en Pages.
-
-## Favicon y confirmación
-
-Se agregó un favicon SVG propio de Forma, fondo carbón y símbolo verde salvia, servido desde public/favicon.svg y enlazado con la base de Vite.
-
-La revisión de Auth confirmó email obligatorio, dominio autorizado y ausencia de SMTP personalizado. Una cuenta temporal no pudo iniciar sesión sin confirmar; el token fue verificado y después obtuvo sesión. Se eliminó sin enviar correo. La entrega real sigue pendiente de SMTP: el servidor predeterminado limita envíos a miembros del equipo y a 2 mensajes por hora en la configuración actual.
+- Entrega de confirmación y recuperación a una bandeja real. La revisión anterior documentó ausencia de SMTP personalizado. No se configuró un proveedor de correo en esta intervención.
+- Android, recorrido automatizado en navegador y pgTAP con Docker. Las pruebas React con jsdom se denominan `test:integration`; no se presentan como E2E de navegador.
+- El listado lateral y los gestores de presets/memorias todavía descargan sus metadatos completos. Los mensajes cargan 50 por página, la galería 24 y las estadísticas se agregan en servidor.
+- Los logs estructurados identifican fase, código y solicitud sin guardar prompts, respuestas ni credenciales. No hay alertas externas ni un presupuesto global en USD; las cuotas son por usuario.
+- El contexto usa una cota conservadora por bytes UTF-8. El texto recortado permanece en el historial, pero ya no se envía al modelo.
+- Timeout de chat: 120 segundos. Una terminación abrupta puede dejar consumo sin confirmar y conserva su reserva. Los intentos obsoletos de chat se cierran al iniciar otra solicitud.
+- No se añadió edición de imágenes de referencia.
