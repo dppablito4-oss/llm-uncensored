@@ -77,3 +77,9 @@ Se validó una cuenta temporal sin enviar correo: el login antes de confirmar de
 Para enviar confirmaciones y recuperaciones a usuarios externos configura SMTP en Supabase Authentication: host, puerto, usuario, contraseña del servicio SMTP y correo remitente verificado. Las credenciales quedan en Supabase; no se agregan a VITE ni a GitHub Pages. La configuración de Auth/SMTP es compartida con la otra aplicación de este proyecto.
 
 El servidor predeterminado de Supabase solo envía a direcciones del equipo y no está pensado para producción. Fuente: https://supabase.com/docs/guides/auth/auth-smtp.
+
+## Quitar la cuota diaria de chat
+
+Para una instalación existente, ejecuta únicamente `supabase/migrations/202611010001_remove_chat_daily_limits.sql` en el SQL Editor del proyecto correcto. No requiere redesplegar Edge Functions. Esta migración desactiva las cuotas diarias de chat para cuentas actuales y futuras usando `NULL` (sin límite). Conserva estadísticas, historial, RLS, el control por minuto y las cuotas independientes de imágenes. El frontend actualizado muestra el consumo sin cuota diaria. Los límites y el saldo de NanoGPT siguen aplicándose.
+
+El instalador nuevo incluye esta migración. Un administrador puede restablecer cuotas opcionales asignando enteros positivos en `forma.user_limits`.

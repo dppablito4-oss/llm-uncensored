@@ -7,8 +7,8 @@ export type UsageSummary = {
   requests_today: number;
   tokens_today: number;
   reserved_today: number;
-  daily_requests: number;
-  daily_tokens: number;
+  daily_requests: number | null;
+  daily_tokens: number | null;
   resets_at: string;
 };
 export function useUsage() {

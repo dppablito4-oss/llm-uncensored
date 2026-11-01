@@ -207,8 +207,8 @@ export function Settings() {
             de cada chat. Se reutiliza junto a los mensajes recientes y no
             elimina el historial. Al actualizarlo se hace como máximo una
             llamada adicional por envío a GLM Flash, con hasta 2048 tokens de
-            salida. Su consumo se incluye en la cuota y en el costo reportado
-            del chat.
+            salida. Su consumo se incluye en las estadísticas y en el costo
+            reportado del chat.
           </p>
           <p className="muted">
             Los parámetros del preset tienen prioridad. El contexto usa un
@@ -229,13 +229,18 @@ export function Settings() {
         {usage && (
           <>
             <p>
-              Hoy: {usage.requests_today} de {usage.daily_requests} solicitudes
-              · {usage.tokens_today.toLocaleString()} de{" "}
-              {usage.daily_tokens.toLocaleString()} tokens.
+              Hoy: {usage.requests_today} solicitudes
+              {usage.daily_requests !== null &&
+                ` de ${usage.daily_requests}`} ·{" "}
+              {usage.tokens_today.toLocaleString()} tokens
+              {usage.daily_tokens !== null &&
+                ` de ${usage.daily_tokens.toLocaleString()}`}
+              .
             </p>
             <p className="muted">
-              La cuota se reinicia el{" "}
-              {new Date(usage.resets_at).toLocaleString()}.{" "}
+              {usage.daily_tokens === null && usage.daily_requests === null
+                ? "Sin cuota diaria de chat en esta app. "
+                : `La cuota se reinicia el ${new Date(usage.resets_at).toLocaleString()}. `}
               {usage.reserved_today > 0
                 ? `${usage.reserved_today.toLocaleString()} tokens están reservados para solicitudes activas o con consumo sin confirmar.`
                 : "Las reservas se liberan al confirmar el consumo del proveedor."}

@@ -605,7 +605,7 @@ ${m.content}`,
         </form>
         <p className="composer-note">
           {usage
-            ? `${Math.max(0, usage.daily_tokens - usage.tokens_today).toLocaleString()} tokens disponibles hoy · ${usage.requests_today}/${usage.daily_requests} solicitudes · `
+            ? `${usage.daily_tokens === null ? "Sin cuota diaria de tokens" : `${Math.max(0, usage.daily_tokens - usage.tokens_today).toLocaleString()} tokens disponibles hoy`} · ${usage.requests_today}${usage.daily_requests === null ? "" : `/${usage.daily_requests}`} solicitudes · `
             : ""}
           Forma puede equivocarse. Comprueba la información importante.
         </p>

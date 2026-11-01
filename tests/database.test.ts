@@ -786,3 +786,84 @@ describe.sequential("Migración PostgreSQL real y aislamiento RLS", () => {
     ).toBe(470);
   });
 });
+
+describe.sequential("Chat sin cuotas diarias", () => {
+  it("quita cuotas existentes y nuevas sin perder consumo ni el control por minuto", async () => {
+    await db.exec(
+      readFileSync(
+        "supabase/migrations/202611010001_remove_chat_daily_limits.sql",
+        "utf8",
+      ),
+    );
+    const limits = await asUser<{
+      daily_tokens: number | null;
+      daily_requests: number | null;
+    }>(a, "select daily_tokens,daily_requests from forma.user_limits");
+    expect(limits.rows[0]).toEqual({
+      daily_tokens: null,
+      daily_requests: null,
+    });
+    const owner = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    await db.query(
+      "insert into auth.users values($1,'unlimited@example.com')",
+      [owner],
+    );
+    await asUser(owner, "select forma.ensure_workspace()");
+    expect(
+      (
+        await asUser(
+          owner,
+          "select daily_tokens,daily_requests from forma.user_limits",
+        )
+      ).rows[0],
+    ).toEqual({ daily_tokens: null, daily_requests: null });
+    const conversation = (
+      await asUser<{ id: string }>(
+        owner,
+        "insert into forma.conversations(user_id,model_id) values($1,$2) returning id",
+        [owner, model],
+      )
+    ).rows[0].id;
+    // Exceed both former daily caps, outside the one-minute rate window.
+    await db.query(
+      `insert into forma.usage_events(request_id,user_id,conversation_id,model_id,reserved_tokens,quota_tokens,status,input_tokens,output_tokens,created_at)
+      select gen_random_uuid(),$1,$2,$3,4000,4000,'complete',3000,1000,now()-interval '2 minutes' from generate_series(1,81)`,
+      [owner, conversation, model],
+    );
+    const event = (
+      await db.query<{ id: string }>(
+        "select forma.begin_generation($1,$2,gen_random_uuid(),'hola',$3,null,'send',null,8192) as id",
+        [owner, conversation, model],
+      )
+    ).rows[0].id;
+    await db.query("select forma.prepare_generation($1,24000,8192,32000)", [
+      event,
+    ]);
+    await db.query(
+      "select forma.finish_generation($1,'respuesta','complete',10,5,null,null,true,true)",
+      [event],
+    );
+    const usage = (
+      await asUser<{ summary: Record<string, unknown> }>(
+        owner,
+        "select forma.usage_summary() as summary",
+      )
+    ).rows[0].summary;
+    expect(usage).toMatchObject({
+      daily_tokens: null,
+      daily_requests: null,
+      requests_today: 82,
+      tokens_today: 324015,
+    });
+    await db.query(
+      "update forma.user_limits set requests_per_minute=1 where user_id=$1",
+      [owner],
+    );
+    await expect(
+      db.query(
+        "select forma.begin_generation($1,$2,gen_random_uuid(),'otra',$3,null,'send',null,100)",
+        [owner, conversation, model],
+      ),
+    ).rejects.toThrow(/RATE_LIMIT/);
+  });
+});

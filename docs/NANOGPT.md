@@ -12,7 +12,7 @@ GLM inicial: USD 0.20 de entrada y USD 0.80 de salida por millón, contexto de 1
 
 ## Cuotas, contexto y longitud de respuesta
 
-Son tres límites distintos. La cuota diaria se consulta en Configuración y se reinicia a las 00:00 UTC. Antes de generar se reserva el contexto realmente enviado más la salida máxima; al terminar, los conteos completos reportados por NanoGPT reemplazan esa reserva. Si no se llamó al proveedor, la reserva se libera. Si se desconoce el consumo, sigue contando por prudencia.
+La app no impone cuota diaria de tokens ni de solicitudes de chat. Se mantiene el control de frecuencia por minuto y los límites por respuesta y contexto. Los límites y el saldo de NanoGPT siguen aplicándose. Antes de generar se reserva el contexto realmente enviado más la salida máxima; al terminar, los conteos completos reportados por NanoGPT reemplazan esa reserva. Si no se llamó al proveedor, la reserva se libera. Si se desconoce el consumo, sigue contando por prudencia.
 
 El presupuesto de contexto prioriza el mensaje actual, después memorias y pares completos de conversación reciente. Los turnos antiguos se recortan del contexto, pero permanecen en el historial y la exportación. Se usa una cota por bytes UTF-8, no un tokenizador exacto del modelo.
 
