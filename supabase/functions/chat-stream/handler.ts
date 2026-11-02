@@ -13,6 +13,9 @@ import {
   contextCost,
   planSummary,
   summaryNeeded,
+  summaryStorageBytes,
+  validateSummary,
+  summaryFailureNotice,
   type ConversationSummary,
   type HistoryTurn,
 } from "../../../shared/summary.ts";
@@ -312,6 +315,7 @@ export async function handler(
               );
               if (plan) {
                 let summaryText = "";
+                let summarySignal: AbortSignal | undefined;
                 try {
                   const { data: summaryModel } = await admin
                     .from("models")
@@ -321,7 +325,7 @@ export async function handler(
                     .maybeSingle();
                   if (!summaryModel) throw new Error("MODEL_UNAVAILABLE");
                   const summaryInput = contextCost(plan.messages),
-                    summaryOutput = 2048;
+                    summaryOutput = 4096;
                   const { error: quotaError } = await admin.rpc(
                     "prepare_generation",
                     {
@@ -332,7 +336,12 @@ export async function handler(
                       p_spent: contextBudget + maxTokens,
                     },
                   );
-                  if (quotaError) throw new Error("SUMMARY_QUOTA");
+                  if (quotaError)
+                    throw new Error(
+                      quotaError.message.includes("TOKEN_LIMIT")
+                        ? "SUMMARY_QUOTA"
+                        : "SUMMARY_RESERVATION",
+                    );
                   controller.signal.throwIfAborted();
                   send({
                     type: "status",
@@ -341,9 +350,9 @@ export async function handler(
                   compact.reserve = summaryInput + summaryOutput;
                   compact.input = summaryInput;
                   compact.started = true;
-                  const summarySignal = AbortSignal.any([
+                  summarySignal = AbortSignal.any([
                     controller.signal,
-                    AbortSignal.timeout(30000),
+                    AbortSignal.timeout(60000),
                   ]);
                   const response = await fetch(
                     "https://nano-gpt.com/api/v1/chat/completions",
@@ -371,7 +380,7 @@ export async function handler(
                   )) {
                     if (item.text) {
                       summaryText += item.text;
-                      if (tokenBound(summaryText) > 6000)
+                      if (tokenBound(summaryText) > summaryStorageBytes)
                         throw new Error("SUMMARY_SIZE");
                     }
                     if (item.usage) {
@@ -393,9 +402,7 @@ export async function handler(
                         compact.cost = Math.max(0, item.usage.cost!);
                     }
                   }
-                  summaryText = summaryText.trim();
-                  if (!summaryText || tokenBound(summaryText) > plan.maxBytes)
-                    throw new Error("SUMMARY_SIZE");
+                  summaryText = validateSummary(summaryText);
                   controller.signal.throwIfAborted();
                   const { error: saveError } = await admin.rpc(
                     "save_conversation_summary",
@@ -427,12 +434,13 @@ export async function handler(
                     });
                 } catch (error) {
                   if (controller.signal.aborted) throw error;
-                  log("summary", "SUMMARY_UNAVAILABLE", event);
-                  send({
-                    type: "context",
-                    message:
-                      "No se pudo actualizar el resumen. Esta respuesta usará el resumen anterior disponible y los mensajes recientes.",
-                  });
+                  const failure = summaryFailureNotice(
+                    summarySignal?.aborted
+                      ? new Error("SUMMARY_TIMEOUT")
+                      : error,
+                  );
+                  log("summary", failure.code, event);
+                  send({ type: "context", ...failure });
                 } finally {
                   if (!compact.outputReported)
                     compact.output = tokenBound(summaryText);

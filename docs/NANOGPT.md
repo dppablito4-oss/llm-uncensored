@@ -37,3 +37,11 @@ La interfaz consulta los modelos habilitados de `forma.models` y sus detalles de
 Se solicita SSE con `stream_options.include_usage`. `[DONE]` confirma el final; la UI recibe `done` después de persistir. HTTP 402 indica saldo insuficiente, 429 límite del proveedor y 404 modelo no disponible. No se reenvían cuerpos privados de error.
 
 Fuentes: [API](https://nano-gpt.com/api), [catálogo](https://nano-gpt.com/api/v1/models?detailed=true), [chat](https://docs.nano-gpt.com/api-reference/endpoint/chat-completion), [SSE](https://docs.nano-gpt.com/api-reference/miscellaneous/streaming-protocol).
+
+## Resúmenes de conversaciones largas
+
+El tamaño solicitado al modelo es un objetivo de compresión, no un motivo para descartar un resumen completo que aún cabe en la base. Se aceptan hasta 6000 bytes UTF-8, igual que la restricción de PostgreSQL, sin truncar el texto ni avanzar el cursor cuando la generación falla. La actualización dispone de hasta 60 segundos y 4096 tokens de salida (incluido razonamiento), dentro de los 120 segundos totales del turno. Sigue habiendo como máximo una llamada de resumen por envío, sin reintentos facturables automáticos.
+
+Los avisos y logs distinguen saldo, frecuencia y fallos del modelo/proveedor, timeout, tamaño, cuota opcional de la app y preparación/guardado en Supabase. No se registran cuerpos privados del proveedor ni el contenido del chat. El resumen anterior y los mensajes originales se conservan si falla la actualización.
+
+El editor móvil usa Enter para insertar una línea y el botón de envío para enviar. En escritorio, Enter envía y Shift+Enter inserta una línea. La composición IME no envía mensajes; el editor crece con el texto hasta 180 píxeles.

@@ -223,6 +223,43 @@ describe("Flujo UI completo con proveedor simulado", () => {
     await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
     await waitFor(() => expect(mock.sent[0]?.model_id).toBe(alternate.id));
   });
+  it.each([false, true])(
+    "Enter respeta teclado móvil=%s y Shift+Enter siempre inserta una línea",
+    async (mobile) => {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: () => ({ matches: mobile }),
+      });
+      mock.setSession({
+        access_token: "user-token",
+        user: { id: "u1", email: "test@example.com" },
+      });
+      const user = userEvent.setup();
+      mount();
+      const editor = await screen.findByRole("textbox", { name: "Mensaje" });
+      await user.type(editor, "primera{Shift>}{Enter}{/Shift}segunda");
+      expect((editor as HTMLTextAreaElement).value).toBe("primera\nsegunda");
+      expect(mock.sent).toHaveLength(0);
+      await user.keyboard("{Enter}");
+      if (mobile) {
+        expect(mock.sent).toHaveLength(0);
+        expect((editor as HTMLTextAreaElement).value).toBe(
+          "primera\nsegunda\n",
+        );
+        await user.click(
+          screen.getByRole("button", { name: "Enviar mensaje" }),
+        );
+      }
+      await waitFor(() => expect(mock.sent).toHaveLength(1));
+      expect(mock.sent[0].content).toBe(
+        mobile ? "primera\nsegunda\n" : "primera\nsegunda",
+      );
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: undefined,
+      });
+    },
+  );
   it("protege rutas, inicia sesión, envía, muestra SSE y recupera conversación", async () => {
     const user = userEvent.setup();
     mount();

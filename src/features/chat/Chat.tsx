@@ -29,6 +29,7 @@ import {
 import { save, change } from "../../services/data";
 import { streamChat, getConversationSummary } from "../../services/chat";
 import { download } from "../../lib/utils";
+import { usesMobileKeyboard } from "../../lib/chat-input";
 import { useData } from "../../hooks/useData";
 import { useUsage } from "../../hooks/useUsage";
 import { Button } from "../../components/ui/button";
@@ -101,7 +102,16 @@ export function Chat({ userId }: { userId: string }) {
     [busy, setBusy] = useState(false),
     [phase, setPhase] = useState("Pensando"),
     [contextNotice, setContextNotice] = useState(""),
+    [summaryWarning, setSummaryWarning] = useState(""),
     [notice, setNotice] = useState(initial.chatNotice || "");
+  const mobileKeyboard = usesMobileKeyboard();
+  const editor = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (editor.current) {
+      editor.current.style.height = "0px";
+      editor.current.style.height = `${Math.min(180, Math.max(52, editor.current.scrollHeight))}px`;
+    }
+  }, [text]);
   const abort = useRef<AbortController | null>(null),
     scroll = useRef<HTMLDivElement>(null),
     follow = useRef(true),
@@ -169,6 +179,7 @@ export function Chat({ userId }: { userId: string }) {
     setDraft("");
     setPhase("Pensando");
     setContextNotice("");
+    setSummaryWarning("");
     setPendingUser(action === "regenerate" ? "" : content);
     follow.current = true;
     const controller = new AbortController();
@@ -203,10 +214,22 @@ export function Chat({ userId }: { userId: string }) {
           }
           if (event.type === "delta") setDraft((v) => v + (event.text || ""));
           if (event.type === "status") setPhase(event.message || "Pensando");
-          if (event.type === "context")
-            setContextNotice((previous) =>
-              [previous, event.message].filter(Boolean).join(" "),
-            );
+          if (event.type === "context") {
+            if (
+              event.code ||
+              event.message?.startsWith("No se pudo actualizar el resumen")
+            ) {
+              setSummaryWarning(
+                event.message || "No se pudo actualizar el resumen.",
+              );
+            } else if (!event.message?.startsWith("Resumen de ")) {
+              setContextNotice((previous) =>
+                [...new Set([previous, event.message].filter(Boolean))].join(
+                  " ",
+                ),
+              );
+            }
+          }
         },
       );
       accepted = true;
@@ -505,7 +528,7 @@ ${m.content}`,
       </div>
       <div className="composer-wrap">
         {summaryQuery.data && (
-          <details className="muted small">
+          <details className="chat-summary muted small">
             <summary>
               Resumen de este chat · {summaryQuery.data.source_count} mensajes
               {profile?.auto_summary === false ? " · desactivado" : ""}
@@ -517,6 +540,17 @@ ${m.content}`,
               Puede omitir detalles. Los mensajes originales siguen en el
               historial.
             </p>
+          </details>
+        )}
+        {summaryWarning && (
+          <details className="summary-warning small" role="status">
+            <summary>
+              {summaryQuery.data
+                ? "El resumen anterior sigue activo"
+                : "No se pudo crear el resumen"}{" "}
+              · ver detalle
+            </summary>
+            <p>{summaryWarning}</p>
           </details>
         )}
         {contextNotice && (
@@ -543,7 +577,10 @@ ${m.content}`,
           }}
         >
           <textarea
+            ref={editor}
             aria-label="Mensaje"
+            aria-describedby="composer-help"
+            enterKeyHint={mobileKeyboard ? "enter" : "send"}
             placeholder="Dale forma a tu próxima idea…"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -553,8 +590,10 @@ ${m.content}`,
             onKeyDown={(e) => {
               if (
                 e.key === "Enter" &&
+                !mobileKeyboard &&
                 !e.shiftKey &&
-                !e.nativeEvent.isComposing
+                !e.nativeEvent.isComposing &&
+                e.keyCode !== 229
               ) {
                 e.preventDefault();
                 void send();
@@ -603,6 +642,16 @@ ${m.content}`,
             )}
           </div>
         </form>
+        <p id="composer-help" className="composer-help">
+          <span>
+            {mobileKeyboard
+              ? "Enter: salto de línea · Toca ↑ para enviar"
+              : "Enter: enviar · Shift+Enter: salto de línea"}
+          </span>
+          {text.length >= 10000 && (
+            <span>{text.length.toLocaleString()} / 12 000</span>
+          )}
+        </p>
         <p className="composer-note">
           {usage
             ? `${usage.daily_tokens === null ? "Sin cuota diaria de tokens" : `${Math.max(0, usage.daily_tokens - usage.tokens_today).toLocaleString()} tokens disponibles hoy`} · ${usage.requests_today}${usage.daily_requests === null ? "" : `/${usage.daily_requests}`} solicitudes · `

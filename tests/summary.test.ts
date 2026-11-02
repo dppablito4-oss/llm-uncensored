@@ -4,6 +4,8 @@ import {
   contextCost,
   planSummary,
   summaryNeeded,
+  validateSummary,
+  summaryFailureNotice,
   type HistoryTurn,
 } from "../shared/summary";
 
@@ -98,5 +100,21 @@ describe("Resumen progresivo con límites", () => {
     );
     expect(tight[0].content).toBe("system\n");
     expect(tokenBound(tight.at(-1)!.content)).toBeGreaterThan(100);
+  });
+});
+
+describe("Validación y diagnóstico de resumen", () => {
+  it("acepta más que el objetivo blando sin truncar datos y respeta bytes UTF-8", () => {
+    expect(validateSummary("a".repeat(6000))).toHaveLength(6000);
+    expect(() => validateSummary("á".repeat(3001))).toThrow("SUMMARY_SIZE");
+    expect(() => validateSummary("  ")).toThrow("SUMMARY_EMPTY");
+  });
+  it("no expone errores desconocidos que podrían contener datos privados", () => {
+    expect(summaryFailureNotice(new Error("private secret"))).toMatchObject({
+      code: "SUMMARY_UNAVAILABLE",
+    });
+    expect(
+      summaryFailureNotice(new Error("private secret")).message,
+    ).not.toContain("private");
   });
 });

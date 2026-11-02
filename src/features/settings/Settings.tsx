@@ -206,7 +206,7 @@ export function Settings() {
             El resumen conserva objetivos, decisiones y preferencias solo dentro
             de cada chat. Se reutiliza junto a los mensajes recientes y no
             elimina el historial. Al actualizarlo se hace como máximo una
-            llamada adicional por envío a GLM Flash, con hasta 2048 tokens de
+            llamada adicional por envío a GLM Flash, con hasta 4096 tokens de
             salida. Su consumo se incluye en las estadísticas y en el costo
             reportado del chat.
           </p>

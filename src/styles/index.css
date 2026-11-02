@@ -1320,3 +1320,50 @@ em {
   justify-content: space-between;
   margin-top: 12px;
 }
+
+.composer:focus-within {
+  border-color: var(--accent, #bbef8b);
+}
+.composer-help {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  margin: 8px 2px 0;
+}
+.chat-summary {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.chat-summary summary,
+.summary-warning summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.chat-summary > p:first-of-type {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.summary-warning {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid #c7aa70;
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--panel);
+}
+.summary-warning p {
+  margin: 6px 0;
+}
+@media (pointer: coarse) {
+  .composer textarea {
+    font-size: 16px;
+  }
+  .composer-footer > .button {
+    min-height: 44px;
+    width: 44px;
+  }
+}
