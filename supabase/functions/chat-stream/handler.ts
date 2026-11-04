@@ -8,7 +8,6 @@ import {
 import { encodeEvent } from "../../../shared/sse.ts";
 import { providerEvents } from "../../../shared/provider.ts";
 import { findModel, modelReasoning } from "../../../shared/models.ts";
-import { defaultModel } from "../../../shared/models.ts";
 import {
   contextCost,
   planSummary,
@@ -317,15 +316,13 @@ export async function handler(
                 let summaryText = "";
                 let summarySignal: AbortSignal | undefined;
                 try {
-                  const { data: summaryModel } = await admin
-                    .from("models")
-                    .select("id")
-                    .eq("id", defaultModel)
-                    .eq("enabled", true)
-                    .maybeSingle();
-                  if (!summaryModel) throw new Error("MODEL_UNAVAILABLE");
+                  // The same model was already authorized for this request above.
+                  // Never route compaction to a different, hidden model.
                   const summaryInput = contextCost(plan.messages),
-                    summaryOutput = 4096;
+                    summaryOutput = Math.min(
+                      4096,
+                      model.max_output_tokens ?? 8192,
+                    );
                   const { error: quotaError } = await admin.rpc(
                     "prepare_generation",
                     {
@@ -364,13 +361,20 @@ export async function handler(
                         "Content-Type": "application/json",
                       },
                       body: JSON.stringify({
-                        model: defaultModel,
+                        model: input.model_id,
                         messages: plan.messages,
                         stream: true,
                         stream_options: { include_usage: true },
                         max_tokens: summaryOutput,
                         temperature: 0.2,
-                        reasoning_effort: modelReasoning(defaultModel, "low"),
+                        ...(modelReasoning(input.model_id, "low")
+                          ? {
+                              reasoning_effort: modelReasoning(
+                                input.model_id,
+                                "low",
+                              ),
+                            }
+                          : {}),
                       }),
                     },
                   );

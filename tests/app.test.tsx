@@ -64,6 +64,7 @@ vi.mock("../src/lib/supabase", () => ({
     from: (table: string) => {
       let filters: Record<string, unknown> = {},
         upsert: Record<string, unknown> | undefined,
+        patch: Record<string, unknown> | undefined,
         single = false,
         descending = false,
         maxRows = Infinity,
@@ -82,6 +83,10 @@ vi.mock("../src/lib/supabase", () => ({
         let rows = (mock.tables[table] || []).filter((r) =>
           Object.entries(filters).every(([k, v]) => r[k] === v),
         );
+        if (patch) {
+          rows.forEach((row) => Object.assign(row, patch));
+          return { data: null, error: null };
+        }
         if (before)
           rows = rows.filter((r) => Number(r[before!.key]) < before!.value);
         if (table === "messages")
@@ -116,6 +121,10 @@ vi.mock("../src/lib/supabase", () => ({
         },
         single: () => {
           single = true;
+          return builder;
+        },
+        update: (v: Record<string, unknown>) => {
+          patch = v;
           return builder;
         },
         upsert: (v: Record<string, unknown>) => {
@@ -222,6 +231,64 @@ describe("Flujo UI completo con proveedor simulado", () => {
     await user.type(screen.getByRole("textbox", { name: "Mensaje" }), "Hola");
     await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
     await waitFor(() => expect(mock.sent[0]?.model_id).toBe(alternate.id));
+  });
+  it("conserva la última selección en chats antiguos, nuevos y tras volver a entrar; el preset no la cambia", async () => {
+    const user = userEvent.setup();
+    mock.setSession({
+      access_token: "user-token",
+      user: { id: "u1", email: "test@example.com" },
+    });
+    mock.tables.conversations = [
+      {
+        id: "old",
+        title: "Chat antiguo",
+        model_id: defaultModel,
+        user_id: "u1",
+      },
+    ];
+    mock.tables.presets = [
+      { id: "preset", name: "Otro preset", model_id: defaultModel },
+    ];
+    mount();
+    const alternate = modelCatalog[1].id;
+    const selector = await screen.findByRole("combobox", { name: "Modelo" });
+    await waitFor(() =>
+      expect((selector as HTMLSelectElement).options.length).toBeGreaterThan(1),
+    );
+    await user.selectOptions(selector, alternate);
+    await waitFor(() =>
+      expect(mock.tables.profiles[0].default_model).toBe(alternate),
+    );
+    await user.click(screen.getByRole("link", { name: "Chat antiguo" }));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("combobox", { name: "Modelo" }) as HTMLSelectElement)
+          .value,
+      ).toBe(alternate),
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Preset activo" }),
+      "preset",
+    );
+    expect(
+      (screen.getByRole("combobox", { name: "Modelo" }) as HTMLSelectElement)
+        .value,
+    ).toBe(alternate);
+    await user.click(screen.getByRole("link", { name: /Nueva conversación/ }));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("combobox", { name: "Modelo" }) as HTMLSelectElement)
+          .value,
+      ).toBe(alternate),
+    );
+    cleanup();
+    mount();
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("combobox", { name: "Modelo" }) as HTMLSelectElement)
+          .value,
+      ).toBe(alternate),
+    );
   });
   it.each([false, true])(
     "Enter respeta teclado móvil=%s y Shift+Enter siempre inserta una línea",

@@ -85,10 +85,10 @@ export function Settings() {
       </article>
       {profile && (
         <article className="settings-card">
-          <h2>Generación predeterminada</h2>
+          <h2>Preferencias de generación</h2>
           <div className="form-grid">
             <label>
-              Modelo
+              Último modelo seleccionado
               <select
                 value={profile.default_model}
                 onChange={(e) => void patch({ default_model: e.target.value })}
@@ -206,16 +206,16 @@ export function Settings() {
             El resumen conserva objetivos, decisiones y preferencias solo dentro
             de cada chat. Se reutiliza junto a los mensajes recientes y no
             elimina el historial. Al actualizarlo se hace como máximo una
-            llamada adicional por envío a GLM Flash, con hasta 4096 tokens de
-            salida. Su consumo se incluye en las estadísticas y en el costo
-            reportado del chat.
+            llamada adicional por envío al mismo modelo seleccionado, con hasta
+            4096 tokens de salida. Su consumo se incluye en las estadísticas y
+            en el costo reportado del chat.
           </p>
           <p className="muted">
-            Los parámetros del preset tienen prioridad. El contexto usa un
-            cálculo conservador por bytes UTF-8, con hasta 60 mensajes
-            recientes. Los tokens de respuesta incluyen el razonamiento interno.
-            El nivel bajo ayuda a dejar espacio para la respuesta visible; el
-            preset activo tiene prioridad.
+            Los presets aplican sus parámetros y conservan el modelo que
+            elegiste. El contexto usa un cálculo conservador por bytes UTF-8,
+            con hasta 60 mensajes recientes. Los tokens de respuesta incluyen el
+            razonamiento interno. El nivel bajo ayuda a dejar espacio para la
+            respuesta visible; el preset activo tiene prioridad.
           </p>
         </article>
       )}

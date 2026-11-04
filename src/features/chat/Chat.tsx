@@ -100,6 +100,7 @@ export function Chat({ userId }: { userId: string }) {
     [draft, setDraft] = useState(""),
     [pendingUser, setPendingUser] = useState(""),
     [busy, setBusy] = useState(false),
+    [savingModel, setSavingModel] = useState(false),
     [phase, setPhase] = useState("Pensando"),
     [contextNotice, setContextNotice] = useState(""),
     [summaryWarning, setSummaryWarning] = useState(""),
@@ -117,12 +118,7 @@ export function Chat({ userId }: { userId: string }) {
     follow = useRef(true),
     mounted = useRef(true),
     previousHeight = useRef<number | null>(null);
-  const selectedModel =
-      model ||
-      current?.model_id ||
-      profile?.default_model ||
-      models[0]?.id ||
-      "",
+  const selectedModel = model || profile?.default_model || models[0]?.id || "",
     selectedPreset =
       preset === "none"
         ? ""
@@ -170,7 +166,7 @@ export function Chat({ userId }: { userId: string }) {
     target?: Message,
     edited?: string,
   ) {
-    if (busy || abort.current) return;
+    if (busy || savingModel || !profile || abort.current) return;
     const content = edited ?? text;
     if (action !== "regenerate" && (!content.trim() || content.length > 12000))
       return;
@@ -267,15 +263,30 @@ export function Chat({ userId }: { userId: string }) {
       }
     }
   }
+  async function selectModel(value: string) {
+    if (!profile || savingModel) return;
+    const previous = selectedModel;
+    setModel(value);
+    setSavingModel(true);
+    try {
+      await change("profiles", profile.id, { default_model: value });
+      await client.invalidateQueries({ queryKey: ["profiles"] });
+      setModel("");
+    } catch {
+      setModel(previous);
+      setNotice(
+        "No se pudo guardar el modelo. Se conserva la selección anterior.",
+      );
+    } finally {
+      setSavingModel(false);
+    }
+  }
   async function selectPreset(value: string) {
     setPreset(value || "none");
-    const p = presets.find((p) => p.id === value);
-    if (p) setModel(p.model_id);
     if (current) {
       try {
         await change("conversations", current.id, {
           preset_id: value || null,
-          ...(p ? { model_id: p.model_id } : {}),
         });
         await client.invalidateQueries({ queryKey: ["conversations"] });
       } catch {
@@ -319,18 +330,8 @@ ${m.content}`,
           <select
             id="model"
             value={selectedModel}
-            disabled={busy}
-            onChange={async (e) => {
-              setModel(e.target.value);
-              if (current)
-                try {
-                  await change("conversations", current.id, {
-                    model_id: e.target.value,
-                  });
-                } catch {
-                  setNotice("No se pudo cambiar el modelo");
-                }
-            }}
+            disabled={busy || savingModel}
+            onChange={(e) => void selectModel(e.target.value)}
           >
             {models.length ? (
               models.map((m) => (
@@ -467,7 +468,7 @@ ${m.content}`,
                     </button>
                     {m.role === "user" && (
                       <button
-                        disabled={busy}
+                        disabled={busy || savingModel}
                         aria-label="Editar y reenviar"
                         onClick={() => {
                           const edited = prompt(
@@ -586,7 +587,7 @@ ${m.content}`,
             onChange={(e) => setText(e.target.value)}
             maxLength={12000}
             rows={2}
-            disabled={busy}
+            disabled={busy || savingModel}
             onKeyDown={(e) => {
               if (
                 e.key === "Enter" &&
@@ -605,7 +606,7 @@ ${m.content}`,
               <select
                 aria-label="Preset activo"
                 value={presetValue}
-                disabled={busy}
+                disabled={busy || savingModel}
                 onChange={(e) => void selectPreset(e.target.value)}
               >
                 <option value="">Sin preset</option>
@@ -635,7 +636,9 @@ ${m.content}`,
             ) : (
               <Button
                 aria-label="Enviar mensaje"
-                disabled={!text.trim() || !selectedModel}
+                disabled={
+                  savingModel || !profile || !text.trim() || !selectedModel
+                }
               >
                 <ArrowUp size={19} />
               </Button>

@@ -45,3 +45,9 @@ El tamaño solicitado al modelo es un objetivo de compresión, no un motivo para
 Los avisos y logs distinguen saldo, frecuencia y fallos del modelo/proveedor, timeout, tamaño, cuota opcional de la app y preparación/guardado en Supabase. No se registran cuerpos privados del proveedor ni el contenido del chat. El resumen anterior y los mensajes originales se conservan si falla la actualización.
 
 El editor móvil usa Enter para insertar una línea y el botón de envío para enviar. En escritorio, Enter envía y Shift+Enter inserta una línea. La composición IME no envía mensajes; el editor crece con el texto hasta 180 píxeles.
+
+## Elección de modelo
+
+La selección de modelo del chat se guarda en `forma.profiles.default_model` (nombre histórico de la columna, ahora última selección). Tiene prioridad en todos los chats sobre sus modelos históricos y los de presets. Cambiar un preset conserva el modelo seleccionado. Si no se puede guardar el cambio se informa al usuario y se mantiene la selección anterior.
+
+La actualización automática de resumen utiliza `input.model_id`, igual que la respuesta, tras validar el modelo autorizado. No se usa GLM como auxiliar ni se cambia de proveedor/modelo ante errores. Las dos llamadas son secuenciales; el consumo adicional del resumen sigue existiendo y se muestra en Configuración. Desactivar el resumen automático elimina esa llamada adicional.

@@ -285,6 +285,30 @@ describe("Edge handler con proveedor simulado y SDK Supabase real", () => {
     expect(text).toContain('"type":"done"');
     expect(summarySaves).toBe(0);
   });
+  it("Gemma genera tanto el resumen como la respuesta sin llamar a GLM", async () => {
+    chatHistory = longHistory();
+    const selected = "Gemma-4-31B-SDFT-Heretic-RP";
+    const text = await (
+      await handler(req({ ...input(), model_id: selected }), env)
+    ).text();
+    expect(text).toContain('"type":"done"');
+    expect(summaryCalls).toBe(1);
+    expect(summaryBody!.model).toBe(selected);
+    expect(providerBody!.model).toBe(selected);
+    expect(summaryBody!.reasoning_effort).toBe("none");
+    const requests = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([url]) =>
+          String(url) === "https://nano-gpt.com/api/v1/chat/completions",
+      );
+    expect(requests).toHaveLength(2);
+    expect(
+      requests.every(
+        ([, init]) => JSON.parse(String(init?.body)).model === selected,
+      ),
+    ).toBe(true);
+  });
   it("si no alcanza la cuota para resumir reserva solo la respuesta", async () => {
     chatHistory = longHistory();
     summaryFailure = "quota";
