@@ -40,14 +40,16 @@ Fuentes: [API](https://nano-gpt.com/api), [catálogo](https://nano-gpt.com/api/v
 
 ## Resúmenes de conversaciones largas
 
-El tamaño solicitado al modelo es un objetivo de compresión, no un motivo para descartar un resumen completo que aún cabe en la base. Se aceptan hasta 6000 bytes UTF-8, igual que la restricción de PostgreSQL, sin truncar el texto ni avanzar el cursor cuando la generación falla. La actualización dispone de hasta 60 segundos y 4096 tokens de salida (incluido razonamiento), dentro de los 120 segundos totales del turno. Sigue habiendo como máximo una llamada de resumen por envío, sin reintentos facturables automáticos.
+Cada ocho intercambios completos (16 mensajes anteriores), el siguiente envío usa una única llamada para responder y generar una ficha acumulativa que fusiona la memoria anterior con el nuevo bloque. La compactación puede adelantarse si se acerca al presupuesto de contexto. La respuesta del proveedor es un JSON con `answer` y `summary`: el parser incremental solo transmite el texto decodificado de `answer`; no imprime el bloque de memoria ni la envoltura JSON.
 
-Los avisos y logs distinguen saldo, frecuencia y fallos del modelo/proveedor, timeout, tamaño, cuota opcional de la app y preparación/guardado en Supabase. No se registran cuerpos privados del proveedor ni el contenido del chat. El resumen anterior y los mensajes originales se conservan si falla la actualización.
+La ficha tiene un objetivo aproximado de 800 tokens, organizado en hechos/nombres, objetivos, decisiones/correcciones y pendientes. No se acumulan resúmenes en la entrada. El límite duro de almacenamiento sigue siendo 6000 bytes UTF-8; nunca se trunca la memoria para avanzar el cursor. Los mensajes enormes pueden aportar extractos señalizados para respetar el presupuesto. Si el mensaje actual no deja espacio, se conserva la ficha anterior y se difiere la actualización.
 
-El editor móvil usa Enter para insertar una línea y el botón de envío para enviar. En escritorio, Enter envía y Shift+Enter inserta una línea. La composición IME no envía mensajes; el editor crece con el texto hasta 180 píxeles.
+Si la memoria se omite, es inválida o se trunca después de completar `answer`, hay como máximo dos reintentos exclusivos de resumen al mismo modelo. Se muestran como estado de actualización; no se genera otra respuesta visible. El consumo/coste de todas las llamadas se suma al evento y la reserva incierta se mantiene. Un fallo de guardado se reintenta en base de datos sin repetir inferencia. El límite total del turno sigue siendo 120 segundos.
+
+El editor conserva la posición de lectura durante streaming y al finalizar. Solo se desplaza al abrir el historial, posicionar la pregunta nueva, cargar mensajes anteriores conservando anclaje o pulsar explícitamente «Ir al último mensaje». El primer chat conserva la posición al navegar a su URL persistida.
 
 ## Elección de modelo
 
 La selección de modelo del chat se guarda en `forma.profiles.default_model` (nombre histórico de la columna, ahora última selección). Tiene prioridad en todos los chats sobre sus modelos históricos y los de presets. Cambiar un preset conserva el modelo seleccionado. Si no se puede guardar el cambio se informa al usuario y se mantiene la selección anterior.
 
-La actualización automática de resumen utiliza `input.model_id`, igual que la respuesta, tras validar el modelo autorizado. No se usa GLM como auxiliar ni se cambia de proveedor/modelo ante errores. Las dos llamadas son secuenciales; el consumo adicional del resumen sigue existiendo y se muestra en Configuración. Desactivar el resumen automático elimina esa llamada adicional.
+La actualización automática de resumen utiliza `input.model_id`, igual que la respuesta, tras validar el modelo autorizado. No se usa GLM como auxiliar ni se cambia de proveedor/modelo ante errores. Normalmente respuesta y resumen comparten una llamada. Solo los reintentos de recuperación son llamadas adicionales y se contabilizan. Desactivar el resumen automático elimina la generación y recuperación de esa ficha.

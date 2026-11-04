@@ -82,6 +82,7 @@ export function Chat({ userId }: { userId: string }) {
     draftText?: string;
     chatNotice?: string;
     ownerId?: string;
+    scrollTop?: number;
   };
   const initial = recoveryState.ownerId === userId ? recoveryState : {};
   const { data: usage } = useUsage();
@@ -98,6 +99,7 @@ export function Chat({ userId }: { userId: string }) {
     [preset, setPreset] = useState(""),
     [text, setText] = useState(initial.draftText || ""),
     [draft, setDraft] = useState(""),
+    [streamMessages, setStreamMessages] = useState<Message[] | null>(null),
     [pendingUser, setPendingUser] = useState(""),
     [busy, setBusy] = useState(false),
     [savingModel, setSavingModel] = useState(false),
@@ -115,7 +117,7 @@ export function Chat({ userId }: { userId: string }) {
   }, [text]);
   const abort = useRef<AbortController | null>(null),
     scroll = useRef<HTMLDivElement>(null),
-    follow = useRef(true),
+    positioned = useRef(false),
     mounted = useRef(true),
     previousHeight = useRef<number | null>(null);
   const selectedModel = model || profile?.default_model || models[0]?.id || "",
@@ -134,7 +136,8 @@ export function Chat({ userId }: { userId: string }) {
     getNextPageParam: (page) =>
       page.length === messagePageSize ? page.at(-1)!.seq : undefined,
   });
-  const messages = (query.data?.pages.flat() || []).slice().reverse();
+  const messages =
+    streamMessages ?? (query.data?.pages.flat() || []).slice().reverse();
   const summaryQuery = useQuery({
     queryKey: ["conversation-summary", id],
     enabled: !!id,
@@ -154,13 +157,20 @@ export function Chat({ userId }: { userId: string }) {
     };
   }, []);
   useEffect(() => {
-    if (previousHeight.current !== null && scroll.current) {
-      scroll.current.scrollTop +=
-        scroll.current.scrollHeight - previousHeight.current;
+    const el = scroll.current;
+    if (!el) return;
+    if (previousHeight.current !== null) {
+      el.scrollTop += el.scrollHeight - previousHeight.current;
       previousHeight.current = null;
-    } else if (follow.current && scroll.current)
-      scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [draft, messages.length, pendingUser]);
+    } else if (!positioned.current && messages.length) {
+      el.scrollTop = initial.scrollTop ?? el.scrollHeight;
+      positioned.current = true;
+    } else if (pendingUser) {
+      // Position the new question once. Streaming never moves the viewport.
+      const question = el.querySelector<HTMLElement>("[data-pending-question]");
+      if (question) el.scrollTop = question.offsetTop - el.offsetTop;
+    }
+  }, [messages.length, pendingUser, initial.scrollTop]);
   async function send(
     action: "send" | "edit" | "regenerate" = "send",
     target?: Message,
@@ -177,7 +187,7 @@ export function Chat({ userId }: { userId: string }) {
     setContextNotice("");
     setSummaryWarning("");
     setPendingUser(action === "regenerate" ? "" : content);
-    follow.current = true;
+    setStreamMessages(messages);
     const controller = new AbortController();
     abort.current = controller;
     let cid = id,
@@ -241,18 +251,21 @@ export function Chat({ userId }: { userId: string }) {
           " Tu mensaje sigue en el editor. Revisa el historial antes de reenviarlo si hubo un corte de conexión.";
       setNotice(failureNotice);
     } finally {
-      setPendingUser("");
-      setDraft("");
+      const readingPosition = scroll.current?.scrollTop ?? 0;
       await Promise.all([
         client.invalidateQueries({ queryKey: ["messages", cid] }),
         client.invalidateQueries({ queryKey: ["conversations"] }),
         client.invalidateQueries({ queryKey: ["usage-summary"] }),
         client.invalidateQueries({ queryKey: ["conversation-summary", cid] }),
       ]);
+      setPendingUser("");
+      setDraft("");
+      setStreamMessages(null);
       if (!id && cid && mounted.current)
         navigate("/chat/" + cid, {
           state: {
             ownerId: userId,
+            scrollTop: readingPosition,
             chatNotice: failureNotice,
             draftText: !accepted && action === "send" ? content : "",
           },
@@ -344,10 +357,11 @@ ${m.content}`,
             )}
           </select>
           <ChevronDown size={14} />
-          <span className="badge">
-            <span />
-            ESPACIO PERSONAL
-          </span>
+          {savingModel && (
+            <span className="muted small" role="status">
+              Guardando modelo…
+            </span>
+          )}
         </div>
         <div className="row">
           {id && (
@@ -371,27 +385,10 @@ ${m.content}`,
         </div>
       </header>
       <ModelInfo id={selectedModel} />
-      <div
-        className="chat-scroll"
-        ref={scroll}
-        onScroll={() => {
-          const el = scroll.current;
-          if (el)
-            follow.current =
-              el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-        }}
-      >
+      <div className="chat-scroll" ref={scroll}>
         {!id && !busy ? (
           <div className="welcome">
-            <div className="orb">✳</div>
-            <span className="eyebrow">
-              UN POCO DE CURIOSIDAD LO CAMBIA TODO
-            </span>
-            <h1>
-              ¿Qué tienes
-              <br />
-              <em>en mente hoy?</em>
-            </h1>
+            <h1>¿En qué puedo ayudarte?</h1>
             <p>
               Una pregunta, una idea a medias o algo por descubrir.
               <br />
@@ -430,7 +427,6 @@ ${m.content}`,
                 variant="ghost"
                 disabled={query.isFetchingNextPage}
                 onClick={() => {
-                  follow.current = false;
                   previousHeight.current = scroll.current?.scrollHeight ?? null;
                   void query.fetchNextPage();
                 }}
@@ -450,7 +446,11 @@ ${m.content}`,
                 </div>
                 <div className="message-body">
                   <strong>{m.role === "user" ? "Tú" : "Forma"}</strong>
-                  <Markdown content={m.content} />
+                  {m.role === "user" ? (
+                    <div className="user-text">{m.content}</div>
+                  ) : (
+                    <Markdown content={m.content} />
+                  )}
                   {m.status !== "complete" && (
                     <span className="partial">
                       Respuesta{" "}
@@ -486,11 +486,11 @@ ${m.content}`,
               </article>
             ))}
             {pendingUser && (
-              <article className="message user">
+              <article className="message user" data-pending-question>
                 <div className="message-avatar">TÚ</div>
                 <div className="message-body">
                   <strong>Tú</strong>
-                  <p>{pendingUser}</p>
+                  <div className="user-text">{pendingUser}</div>
                 </div>
               </article>
             )}
@@ -500,7 +500,14 @@ ${m.content}`,
                 <div className="message-body">
                   <strong>Forma</strong>
                   {draft ? (
-                    <Markdown content={draft} />
+                    <>
+                      <Markdown content={draft} />
+                      {phase.startsWith("Actualizando resumen") && (
+                        <p className="muted small" role="status">
+                          {phase}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <span className="thinking">
                       {phase}
@@ -527,6 +534,20 @@ ${m.content}`,
           </div>
         )}
       </div>
+      {(messages.length > 0 || busy) && (
+        <button
+          className="jump-latest"
+          aria-label="Ir al último mensaje"
+          onClick={() =>
+            scroll.current?.scrollTo({
+              top: scroll.current.scrollHeight,
+              behavior: "smooth",
+            })
+          }
+        >
+          <ChevronDown size={16} /> Ir al último mensaje
+        </button>
+      )}
       <div className="composer-wrap">
         {summaryQuery.data && (
           <details className="chat-summary muted small">

@@ -157,14 +157,32 @@ beforeEach(() => {
         if (body.messages[0].content.startsWith("Maintain a concise")) {
           summaryCalls++;
           summaryBody = providerBody;
-          if (summaryFailure === "rate")
-            return json({ error: "private provider error" }, 429);
-          if (summaryFailure === "timeout") throw new Error("SUMMARY_TIMEOUT");
+          if (summaryFailure === "retry-fail")
+            return json({ error: "private" }, 429);
+          const value = summaryText;
           return new Response(
-            `data: ${JSON.stringify({ choices: [{ delta: { content: summaryText } }] })}\n\n` +
-              (summaryFailure === "usage"
+            `data: ${JSON.stringify({ choices: [{ delta: { content: value } }] })}\n\ndata: {"usage":{"prompt_tokens":20,"completion_tokens":3,"cost":0.002}}\n\ndata: [DONE]\n\n`,
+          );
+        }
+        if (body.messages[0].content.includes("ONE response")) {
+          const raw = JSON.stringify({
+            answer: "**respuesta** visible",
+            summary:
+              summaryFailure === "missing" || summaryFailure === "retry-fail"
                 ? ""
-                : 'data: {"usage":{"prompt_tokens":20,"completion_tokens":3,"cost":0.002}}\n\n') +
+                : summaryText,
+          });
+          const delivered =
+            summaryFailure === "length" ? raw.slice(0, -20) : raw;
+          const pieces = delivered.match(/.{1,13}/gs) || [];
+          return new Response(
+            pieces
+              .map(
+                (content) =>
+                  `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+              )
+              .join("") +
+              'data: {"usage":{"prompt_tokens":10,"completion_tokens":2,"cost":0.001}}\n\n' +
               (summaryFailure === "length"
                 ? 'data: {"choices":[{"finish_reason":"length"}]}\n\n'
                 : "") +
@@ -188,161 +206,92 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 describe("Edge handler con proveedor simulado y SDK Supabase real", () => {
   const longHistory = () =>
-    Array.from({ length: 13 }, (_, i) => ({
+    Array.from({ length: 17 }, (_, i) => ({
       seq: i + 1,
       role: i % 2 ? "assistant" : "user",
       status: "complete",
-      content: `mensaje ${i} ` + "x".repeat(1200),
+      content: `mensaje ${i} ` + "x".repeat(100),
     }));
-  it("resume antes de perder contexto, persiste y reutiliza sin otra llamada", async () => {
+  it("el noveno envío responde y resume 16 mensajes con UNA llamada al modelo elegido", async () => {
     chatHistory = longHistory();
-    const first = await (await handler(req(input()), env)).text();
-    expect(first).toContain('"type":"done"');
-    expect(first).toContain("Resumiendo");
+    const text = await (
+      await handler(
+        req({ ...input(), model_id: "Gemma-4-31B-SDFT-Heretic-RP" }),
+        env,
+      )
+    ).text();
+    expect(text).toContain('"type":"done"');
+    expect(text).toContain("respuesta");
+    expect(text).not.toContain("prepara una tienda");
+    expect(savedSummary).toMatchObject({ through_seq: 16, source_count: 16 });
+    const calls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) => String(url).includes("nano-gpt.com"));
+    expect(calls).toHaveLength(1);
+    expect(providerBody!.model).toBe("Gemma-4-31B-SDFT-Heretic-RP");
+    expect(finish).toMatchObject({
+      p_content: "**respuesta** visible",
+      p_input: 10,
+      p_output: 2,
+      p_cost: 0.001,
+      p_usage_reported: true,
+    });
+    await (await handler(req(input()), env)).text();
+    expect(summaryCalls).toBe(0); // The same 16 messages are never summarized again.
+  });
+  it("recupera solo memoria si se corta después de completar la respuesta visible", async () => {
+    chatHistory = longHistory();
+    summaryFailure = "length";
+    const text = await (await handler(req(input()), env)).text();
+    expect(text).toContain('"type":"done"');
+    expect(finish!.p_content).toBe("**respuesta** visible");
     expect(summaryCalls).toBe(1);
     expect(summarySaves).toBe(1);
-    expect(savedSummary).toMatchObject({ through_seq: 8, source_count: 8 });
-    expect(JSON.stringify(providerBody)).toContain("prepara una tienda");
-    expect(JSON.stringify(providerBody)).toContain("mensaje 12");
-    expect(JSON.stringify(providerBody)).not.toContain("mensaje 0 ");
+  });
+  it("no resume siete intercambios cortos", async () => {
+    chatHistory = longHistory().slice(0, 15);
+    await (await handler(req(input()), env)).text();
+    expect(summarySaves).toBe(0);
+    expect(summaryCalls).toBe(0);
+  });
+  it("si falta memoria reintenta solo resumen sin repetir la respuesta y suma su coste", async () => {
+    chatHistory = longHistory();
+    summaryFailure = "missing";
+    const text = await (await handler(req(input()), env)).text();
+    expect(text).toContain('"type":"done"');
+    expect(summaryCalls).toBe(1);
+    expect(summarySaves).toBe(1);
     expect(finish).toMatchObject({
+      p_content: "**respuesta** visible",
       p_input: 30,
       p_output: 5,
       p_cost: 0.003,
-      p_usage_reported: true,
-      p_provider_started: true,
     });
-    expect(preparations[0].p_spent).toBe(13000);
-    expect(preparations[1].p_spent).toBe(23);
-    expect(chatHistory).toHaveLength(13);
-    await (await handler(req(input()), env)).text();
-    expect(summaryCalls).toBe(1);
-    expect(finish?.p_input).toBe(10);
+    expect(summaryBody!.model).toBe(defaultModel);
+    expect(preparations[1].p_spent).toBe(12);
   });
-  it.each(["length", "save"])(
-    "un resumen fallido (%s) conserva el cursor y permite responder",
-    async (failure) => {
-      chatHistory = longHistory();
-      summaryFailure = failure;
-      const text = await (await handler(req(input()), env)).text();
-      expect(text).toContain('"type":"done"');
-      expect(text).toContain("No se pudo actualizar el resumen");
-      expect(text).not.toContain("private DB error");
-      expect(savedSummary).toBeNull();
-      expect(summaryCalls).toBe(1);
-      expect(finish).toMatchObject({
-        p_input: 30,
-        p_output: 5,
-        p_usage_reported: true,
-      });
-    },
-  );
-  it("actualiza un resumen de 129 mensajes aunque supere el objetivo blando", async () => {
-    chatHistory = Array.from({ length: 143 }, (_, i) => ({
-      seq: i + 1,
-      role: i % 2 ? "assistant" : "user",
-      status: "complete",
-      content: "dato ".repeat(240),
-    }));
-    savedSummary = {
-      content: "Resumen anterior",
-      through_seq: 129,
-      source_count: 129,
-    };
-    summaryText = "Preferencias y decisiones confirmadas. ".repeat(90);
-    const text = await (await handler(req(input()), env)).text();
-    expect(text).toContain('"type":"done"');
-    expect(text).not.toContain("No se pudo actualizar");
-    expect(summaryCalls).toBe(1);
-    expect(summarySaves).toBe(1);
-    expect(savedSummary!.source_count).toBeGreaterThan(129);
-    expect(savedSummary!.content).toBe(summaryText.trim());
-    expect(summaryBody!.max_tokens).toBe(4096);
-  });
-  it.each([
-    ["rate", "PROVIDER_RATE_LIMIT", "NanoGPT está limitando"],
-    ["timeout", "SUMMARY_TIMEOUT", "tardó demasiado"],
-    ["save", "SUMMARY_SAVE", "Supabase no pudo guardar"],
-  ])(
-    "distingue el fallo de resumen %s sin bloquear la respuesta",
-    async (failure, code, message) => {
-      chatHistory = longHistory();
-      summaryFailure = failure;
-      const text = await (await handler(req(input()), env)).text();
-      expect(text).toContain('"type":"done"');
-      expect(text).toContain(code);
-      expect(text).toContain(message);
-      expect(text).not.toContain("private");
-      expect(summaryCalls).toBe(1);
-      expect(savedSummary).toBeNull();
-    },
-  );
-  it("no guarda ni avanza el cursor si el resumen supera los 6000 bytes", async () => {
+  it("limita recuperación a dos llamadas y conserva cursor y respuesta si falla", async () => {
     chatHistory = longHistory();
-    summaryText = "🦊".repeat(1501);
+    summaryFailure = "retry-fail";
     const text = await (await handler(req(input()), env)).text();
-    expect(text).toContain("SUMMARY_SIZE");
     expect(text).toContain('"type":"done"');
+    expect(text).toContain("PROVIDER_RATE_LIMIT");
+    expect(summaryCalls).toBe(2);
     expect(summarySaves).toBe(0);
+    expect(savedSummary).toBeNull();
+    expect(finish!.p_content).toBe("**respuesta** visible");
+    expect(finish!.p_usage_reported).toBe(false);
   });
-  it("Gemma genera tanto el resumen como la respuesta sin llamar a GLM", async () => {
+  it("un fallo de guardado no repite inferencia ni modifica el cursor", async () => {
     chatHistory = longHistory();
-    const selected = "Gemma-4-31B-SDFT-Heretic-RP";
-    const text = await (
-      await handler(req({ ...input(), model_id: selected }), env)
-    ).text();
-    expect(text).toContain('"type":"done"');
-    expect(summaryCalls).toBe(1);
-    expect(summaryBody!.model).toBe(selected);
-    expect(providerBody!.model).toBe(selected);
-    expect(summaryBody!.reasoning_effort).toBe("none");
-    const requests = vi
-      .mocked(fetch)
-      .mock.calls.filter(
-        ([url]) =>
-          String(url) === "https://nano-gpt.com/api/v1/chat/completions",
-      );
-    expect(requests).toHaveLength(2);
-    expect(
-      requests.every(
-        ([, init]) => JSON.parse(String(init?.body)).model === selected,
-      ),
-    ).toBe(true);
-  });
-  it("si no alcanza la cuota para resumir reserva solo la respuesta", async () => {
-    chatHistory = longHistory();
-    summaryFailure = "quota";
+    summaryFailure = "save";
     const text = await (await handler(req(input()), env)).text();
-    expect(text).toContain('"type":"done"');
+    expect(text).toContain("SUMMARY_SAVE");
+    expect(summarySaves).toBe(2);
     expect(summaryCalls).toBe(0);
-    expect(finish?.p_input).toBe(10);
-    expect(preparations.at(-1)?.p_spent).toBe(0);
+    expect(savedSummary).toBeNull();
   });
-  it("mantiene la reserva del resumen si su proveedor no reporta uso", async () => {
-    chatHistory = longHistory();
-    summaryFailure = "usage";
-    const text = await (await handler(req(input()), env)).text();
-    expect(text).toContain('"type":"done"');
-    expect(finish?.p_usage_reported).toBe(false);
-    expect(preparations[1].p_spent).toBe(
-      preparations[0].p_input + preparations[0].p_max_output,
-    );
-    expect(summarySaves).toBe(1);
-  });
-  it("cobra solo el resumen completado si la respuesta no llega a iniciarse", async () => {
-    chatHistory = longHistory();
-    summaryFailure = "answer-quota";
-    const text = await (await handler(req(input()), env)).text();
-    expect(text).toContain("TOKEN_LIMIT");
-    expect(finish).toMatchObject({
-      p_input: 20,
-      p_output: 3,
-      p_usage_reported: true,
-      p_provider_started: true,
-    });
-    expect(savedSummary).not.toBeNull();
-  });
-  it("respeta resumen desactivado y nunca envía un resumen guardado", async () => {
+  it("resumen desactivado conserva el flujo de texto normal sin llamadas adicionales", async () => {
     chatHistory = longHistory();
     autoSummary = false;
     savedSummary = {
@@ -352,6 +301,7 @@ describe("Edge handler con proveedor simulado y SDK Supabase real", () => {
     };
     await (await handler(req(input()), env)).text();
     expect(summaryCalls).toBe(0);
+    expect(summarySaves).toBe(0);
     expect(JSON.stringify(providerBody)).not.toContain("PRIVATE_OLD_SUMMARY");
   });
   it("flujo completo: JWT, propiedad, reserva, contexto, SSE y confirmación persistida", async () => {

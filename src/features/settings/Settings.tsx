@@ -205,10 +205,12 @@ export function Settings() {
           <p className="muted">
             El resumen conserva objetivos, decisiones y preferencias solo dentro
             de cada chat. Se reutiliza junto a los mensajes recientes y no
-            elimina el historial. Al actualizarlo se hace como máximo una
-            llamada adicional por envío al mismo modelo seleccionado, con hasta
-            4096 tokens de salida. Su consumo se incluye en las estadísticas y
-            en el costo reportado del chat.
+            elimina el historial. Cada ocho intercambios (16 mensajes), la
+            respuesta incluye un resumen acumulativo oculto, con un objetivo de
+            unos 800 tokens. Si el contexto se llena antes, puede actualizarse
+            antes. Solo si falta o falla, se hacen hasta dos reintentos
+            adicionales al mismo modelo; su consumo se incluye en las
+            estadísticas.
           </p>
           <p className="muted">
             Los presets aplican sus parámetros y conservan el modelo que

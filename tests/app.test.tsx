@@ -31,6 +31,9 @@ const mock = vi.hoisted(() => {
     event: (e: string, s: unknown) => listeners.forEach((f) => f(e, s)),
     sent: [] as Record<string, unknown>[],
     failFetch: false,
+    holdStream: false,
+    emit: undefined as ((event: Record<string, unknown>) => void) | undefined,
+    endStream: undefined as (() => void) | undefined,
   };
 });
 vi.mock("../src/lib/supabase", () => ({
@@ -143,6 +146,9 @@ beforeEach(() => {
   mock.setSession(null);
   mock.sent = [];
   mock.failFetch = false;
+  mock.holdStream = false;
+  mock.emit = undefined;
+  mock.endStream = undefined;
   window.location.hash = "/chat";
   for (const key of Object.keys(mock.tables)) delete mock.tables[key];
   mock.tables.models = modelCatalog.slice(0, 2);
@@ -181,6 +187,24 @@ beforeEach(() => {
           seq: 2,
         },
       );
+      if (mock.holdStream)
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              const encoder = new TextEncoder();
+              mock.emit = (event) =>
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+                );
+              mock.endStream = () => {
+                mock.emit!({ type: "done", status: "complete" });
+                controller.close();
+              };
+              mock.emit({ type: "accepted" });
+            },
+          }),
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
       return new Response(
         'data: {"type":"delta","text":"Hola desde "}\n\ndata: {"type":"delta","text":"el proveedor simulado"}\n\ndata: {"type":"done","status":"complete"}\n\n',
         { headers: { "Content-Type": "text/event-stream" } },
@@ -290,6 +314,57 @@ describe("Flujo UI completo con proveedor simulado", () => {
       ).toBe(alternate),
     );
   });
+  it("la generación y su reemplazo persistido conservan la posición de lectura", async () => {
+    mock.setSession({
+      access_token: "user-token",
+      user: { id: "u1", email: "test@example.com" },
+    });
+    mock.tables.conversations = [
+      { id: "old", title: "Chat antiguo", model_id: defaultModel },
+    ];
+    mock.tables.messages = [
+      {
+        id: "old-user",
+        conversation_id: "old",
+        role: "user",
+        content: "antes",
+        seq: -2,
+        status: "complete",
+      },
+      {
+        id: "old-answer",
+        conversation_id: "old",
+        role: "assistant",
+        content: "respuesta anterior",
+        seq: -1,
+        status: "complete",
+      },
+    ];
+    window.location.hash = "/chat/old";
+    mock.holdStream = true;
+    const user = userEvent.setup();
+    mount();
+    await screen.findByText("respuesta anterior");
+    await user.type(
+      screen.getByRole("textbox", { name: "Mensaje" }),
+      "pregunta nueva",
+    );
+    await user.click(screen.getByRole("button", { name: "Enviar mensaje" }));
+    await waitFor(() => expect(mock.emit).toBeDefined());
+    const scroller = document.querySelector(".chat-scroll") as HTMLElement;
+    scroller.scrollTop = 120;
+    mock.emit!({ type: "delta", text: "Hola desde " });
+    await screen.findByText("Hola desde");
+    expect(scroller.scrollTop).toBe(120);
+    mock.emit!({ type: "delta", text: "el proveedor simulado" });
+    mock.endStream!();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Detener respuesta" }),
+      ).toBeNull(),
+    );
+    expect(scroller.scrollTop).toBe(120);
+  });
   it.each([false, true])(
     "Enter respeta teclado móvil=%s y Shift+Enter siempre inserta una línea",
     async (mobile) => {
@@ -339,7 +414,7 @@ describe("Flujo UI completo con proveedor simulado", () => {
     await user.click(
       screen.getByRole("button", { name: "Entrar a mi espacio" }),
     );
-    await screen.findByRole("heading", { name: /¿Qué tienes/ });
+    await screen.findByRole("heading", { name: /¿En qué puedo ayudarte/ });
     await user.type(
       screen.getByRole("textbox", { name: "Mensaje" }),
       "Hola mundo",
@@ -359,7 +434,7 @@ describe("Flujo UI completo con proveedor simulado", () => {
     expect(mock.sent[0]).not.toHaveProperty("messages");
     expect(mock.tables.conversations).toHaveLength(1);
     await user.click(screen.getByRole("link", { name: /Nueva conversación/ }));
-    await screen.findByRole("heading", { name: /¿Qué tienes/ });
+    await screen.findByRole("heading", { name: /¿En qué puedo ayudarte/ });
     await user.click(screen.getByRole("link", { name: "Hola mundo" }));
     await screen.findByText(
       "Hola desde el proveedor simulado",
@@ -446,6 +521,9 @@ describe("Flujo UI completo con proveedor simulado", () => {
       "#/chat/" + mock.tables.conversations[0].id,
     );
     mock.failFetch = false;
+    mock.holdStream = false;
+    mock.emit = undefined;
+    mock.endStream = undefined;
     await user.click(retry);
     await screen.findByText(
       "Hola desde el proveedor simulado",

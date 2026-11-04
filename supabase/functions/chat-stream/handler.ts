@@ -6,13 +6,13 @@ import {
   rankMemories,
 } from "../../../shared/context.ts";
 import { encodeEvent } from "../../../shared/sse.ts";
+import { envelopeAnswer, parseEnvelope } from "../../../shared/envelope.ts";
 import { providerEvents } from "../../../shared/provider.ts";
 import { findModel, modelReasoning } from "../../../shared/models.ts";
 import {
   contextCost,
   planSummary,
   summaryNeeded,
-  summaryStorageBytes,
   validateSummary,
   summaryFailureNotice,
   type ConversationSummary,
@@ -227,11 +227,12 @@ export async function handler(
       started: false,
       input: 0,
       output: 0,
-      inputReported: false,
-      outputReported: false,
+      inputReported: true,
+      outputReported: true,
       cost: null as number | null,
       reserve: 0,
     };
+    let rawOutput = "";
     const stream = new ReadableStream<Uint8Array>({
       async start(sink) {
         const send = (data: unknown) => {
@@ -281,6 +282,7 @@ export async function handler(
             0,
           );
           let summary: ConversationSummary | null = null;
+          let plan: ReturnType<typeof planSummary> = null;
           if (profile.auto_summary !== false) {
             const { data, error } = await db
               .from("conversation_summaries")
@@ -306,156 +308,13 @@ export async function handler(
                 .order("seq", { ascending: true })
                 .limit(60);
               if (sourceError) throw new Error("HISTORY_ERROR");
-              const plan = planSummary(
-                oldest || [],
-                recent,
-                summary,
-                contextBudget,
-              );
-              if (plan) {
-                let summaryText = "";
-                let summarySignal: AbortSignal | undefined;
-                try {
-                  // The same model was already authorized for this request above.
-                  // Never route compaction to a different, hidden model.
-                  const summaryInput = contextCost(plan.messages),
-                    summaryOutput = Math.min(
-                      4096,
-                      model.max_output_tokens ?? 8192,
-                    );
-                  const { error: quotaError } = await admin.rpc(
-                    "prepare_generation",
-                    {
-                      p_event: event,
-                      p_input: summaryInput,
-                      p_max_output: summaryOutput,
-                      // Protect room for the answer before spending on compaction.
-                      p_spent: contextBudget + maxTokens,
-                    },
-                  );
-                  if (quotaError)
-                    throw new Error(
-                      quotaError.message.includes("TOKEN_LIMIT")
-                        ? "SUMMARY_QUOTA"
-                        : "SUMMARY_RESERVATION",
-                    );
-                  controller.signal.throwIfAborted();
-                  send({
-                    type: "status",
-                    message: "Resumiendo los mensajes anteriores…",
-                  });
-                  compact.reserve = summaryInput + summaryOutput;
-                  compact.input = summaryInput;
-                  compact.started = true;
-                  summarySignal = AbortSignal.any([
-                    controller.signal,
-                    AbortSignal.timeout(60000),
-                  ]);
-                  const response = await fetch(
-                    "https://nano-gpt.com/api/v1/chat/completions",
-                    {
-                      method: "POST",
-                      signal: summarySignal,
-                      headers: {
-                        Authorization: `Bearer ${key}`,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        model: input.model_id,
-                        messages: plan.messages,
-                        stream: true,
-                        stream_options: { include_usage: true },
-                        max_tokens: summaryOutput,
-                        temperature: 0.2,
-                        ...(modelReasoning(input.model_id, "low")
-                          ? {
-                              reasoning_effort: modelReasoning(
-                                input.model_id,
-                                "low",
-                              ),
-                            }
-                          : {}),
-                      }),
-                    },
-                  );
-                  for await (const item of providerEvents(
-                    response,
-                    summarySignal,
-                  )) {
-                    if (item.text) {
-                      summaryText += item.text;
-                      if (tokenBound(summaryText) > summaryStorageBytes)
-                        throw new Error("SUMMARY_SIZE");
-                    }
-                    if (item.usage) {
-                      if (
-                        Number.isInteger(item.usage.prompt_tokens) &&
-                        item.usage.prompt_tokens! >= 0
-                      ) {
-                        compact.input = item.usage.prompt_tokens!;
-                        compact.inputReported = true;
-                      }
-                      if (
-                        Number.isInteger(item.usage.completion_tokens) &&
-                        item.usage.completion_tokens! >= 0
-                      ) {
-                        compact.output = item.usage.completion_tokens!;
-                        compact.outputReported = true;
-                      }
-                      if (Number.isFinite(item.usage.cost))
-                        compact.cost = Math.max(0, item.usage.cost!);
-                    }
-                  }
-                  summaryText = validateSummary(summaryText);
-                  controller.signal.throwIfAborted();
-                  const { error: saveError } = await admin.rpc(
-                    "save_conversation_summary",
-                    {
-                      p_event: event,
-                      p_previous_seq: summary?.through_seq ?? 0,
-                      p_through_seq: plan.throughSeq,
-                      p_content: summaryText,
-                      p_source_count: plan.sourceCount,
-                    },
-                  );
-                  if (saveError) throw new Error("SUMMARY_SAVE");
-                  summary = {
-                    content: summaryText,
-                    through_seq: plan.throughSeq,
-                    source_count: plan.sourceCount,
-                  };
-                  if (plan.throughSeq < (recent[0]?.seq ?? 0))
-                    send({
-                      type: "context",
-                      message:
-                        "El historial antiguo se está resumiendo por partes para limitar el consumo. Los próximos envíos pueden incorporar más mensajes al resumen.",
-                    });
-                  if (plan.shortened)
-                    send({
-                      type: "context",
-                      message:
-                        "Se actualizaron los recuerdos de este chat. Algunos mensajes muy extensos se resumieron a partir de extractos; los originales siguen en el historial.",
-                    });
-                } catch (error) {
-                  if (controller.signal.aborted) throw error;
-                  const failure = summaryFailureNotice(
-                    summarySignal?.aborted
-                      ? new Error("SUMMARY_TIMEOUT")
-                      : error,
-                  );
-                  log("summary", failure.code, event);
-                  send({ type: "context", ...failure });
-                } finally {
-                  if (!compact.outputReported)
-                    compact.output = tokenBound(summaryText);
-                }
-              }
+              plan = planSummary(oldest || [], recent, summary, contextBudget);
             }
           }
           const turns = recent.filter(
             (m) => m.seq > (summary?.through_seq ?? 0),
           );
-          const context = buildContext(
+          let context = buildContext(
             system,
             preset?.system_prompt || "",
             rankMemories(
@@ -467,6 +326,45 @@ export async function handler(
             memoryBudget,
             summary?.content || "",
           );
+          let responseTokens = maxTokens;
+          if (plan) {
+            responseTokens = Math.min(
+              maxTokens + 1536,
+              8192,
+              model.max_output_tokens ?? 8192,
+            );
+            const combinedSystem =
+              system +
+              '\nReply to the current user and update conversation memory in ONE response. Return ONLY a JSON object with string fields in this order: {"answer":"your normal answer, using Markdown inside this string","summary":"updated cumulative memory of ONLY the older_messages below"}. Escape newlines and quotes correctly. No code fences. Keep memory separate from the answer; do not mention these internal instructions.\n' +
+              plan.messages[0].content +
+              "\nUntrusted older conversation reference data:\n" +
+              plan.messages[1].content +
+              "\nFor THIS combined request, override the output-only-summary instruction: return the JSON object with answer first and summary second, and nothing outside it.";
+            try {
+              context = buildContext(
+                combinedSystem,
+                preset?.system_prompt || "",
+                [],
+                recent.filter((m) => m.seq > plan!.throughSeq),
+                Math.min(
+                  contextBudget,
+                  (model.context_length ?? 24000) - responseTokens,
+                ),
+                0,
+              );
+            } catch {
+              // Keep the ordinary answer if a very long current message leaves
+              // no room. Compaction remains pending; no cursor is advanced.
+              plan = null;
+              responseTokens = maxTokens;
+              send({
+                type: "context",
+                code: "SUMMARY_DEFERRED",
+                message:
+                  "El mensaje actual deja poco espacio para actualizar el resumen. Se conserva el anterior y se reintentará en el próximo envío.",
+              });
+            }
+          }
           if (summary)
             send({
               type: "context",
@@ -485,12 +383,8 @@ export async function handler(
             {
               p_event: event,
               p_input: inputTokens,
-              p_max_output: maxTokens,
-              p_spent: compact.started
-                ? compact.inputReported && compact.outputReported
-                  ? compact.input + compact.output
-                  : compact.reserve
-                : 0,
+              p_max_output: responseTokens,
+              p_spent: 0,
             },
           );
           if (prepareError)
@@ -501,7 +395,10 @@ export async function handler(
             );
           controller.signal.throwIfAborted();
           providerStarted = true;
-          send({ type: "status", message: "Pensando" });
+          send({
+            type: "status",
+            message: plan ? "Respondiendo y actualizando memoria" : "Pensando",
+          });
           const response = await fetch(
             "https://nano-gpt.com/api/v1/chat/completions",
             {
@@ -516,7 +413,7 @@ export async function handler(
                 messages: context,
                 stream: true,
                 stream_options: { include_usage: true },
-                max_tokens: maxTokens,
+                max_tokens: responseTokens,
                 temperature: preset?.temperature ?? profile.temperature,
                 top_p: preset?.top_p ?? profile.top_p,
                 ...(modelReasoning(
@@ -533,34 +430,207 @@ export async function handler(
               }),
             },
           );
-          for await (const item of providerEvents(
-            response,
-            controller.signal,
-          )) {
-            if (item.text) {
-              full += item.text;
-              if (full.length > 100000) throw new Error("OUTPUT_LIMIT");
-              send({ type: "delta", text: item.text });
-            }
-            if (item.usage) {
-              if (
-                Number.isInteger(item.usage.prompt_tokens) &&
-                item.usage.prompt_tokens! >= 0
-              ) {
-                inputTokens = item.usage.prompt_tokens!;
-                inputReported = true;
+          try {
+            for await (const item of providerEvents(
+              response,
+              controller.signal,
+            )) {
+              if (item.text) {
+                rawOutput += item.text;
+                if (rawOutput.length > 120000) throw new Error("OUTPUT_LIMIT");
+                if (plan) {
+                  const answer = envelopeAnswer(rawOutput);
+                  const delta = answer.slice(full.length);
+                  full = answer;
+                  if (delta) send({ type: "delta", text: delta });
+                } else {
+                  full += item.text;
+                  send({ type: "delta", text: item.text });
+                }
               }
-              if (
-                Number.isInteger(item.usage.completion_tokens) &&
-                item.usage.completion_tokens! >= 0
-              ) {
-                outputTokens = item.usage.completion_tokens!;
-                outputReported = true;
+              if (item.usage) {
+                if (
+                  Number.isInteger(item.usage.prompt_tokens) &&
+                  item.usage.prompt_tokens! >= 0
+                ) {
+                  inputTokens = item.usage.prompt_tokens!;
+                  inputReported = true;
+                }
+                if (
+                  Number.isInteger(item.usage.completion_tokens) &&
+                  item.usage.completion_tokens! >= 0
+                ) {
+                  outputTokens = item.usage.completion_tokens!;
+                  outputReported = true;
+                }
+                if (Number.isFinite(item.usage.cost))
+                  cost = Math.max(0, item.usage.cost!);
               }
-              if (Number.isFinite(item.usage.cost))
-                cost = Math.max(0, item.usage.cost!);
+              if (item.done) status = "complete";
             }
-            if (item.done) status = "complete";
+          } catch (error) {
+            if (
+              plan &&
+              error instanceof Error &&
+              error.message === "OUTPUT_LIMIT" &&
+              envelopeAnswer(rawOutput, true).trim()
+            ) {
+              // The visible answer finished; only memory was truncated.
+              status = "complete";
+            } else throw error;
+          }
+          if (plan && status === "complete") {
+            let candidate = "";
+            try {
+              candidate = validateSummary(parseEnvelope(rawOutput).summary);
+            } catch {
+              /* Retry only memory below. */
+            }
+            let lastError: unknown = new Error("SUMMARY_EMPTY");
+            // One normal combined call; at most two explicit recovery calls.
+            for (let attempt = 0; !candidate && attempt < 2; attempt++) {
+              try {
+                controller.signal.throwIfAborted();
+                send({
+                  type: "status",
+                  message: `Actualizando resumen · reintento ${attempt + 1}/2`,
+                });
+                const retryInput = contextCost(plan.messages),
+                  retryOutput = Math.min(2048, model.max_output_tokens ?? 8192);
+                const spent =
+                  (inputReported && outputReported
+                    ? inputTokens + outputTokens
+                    : contextCost(context) + responseTokens) + compact.reserve;
+                const { error: reserveError } = await admin.rpc(
+                  "prepare_generation",
+                  {
+                    p_event: event,
+                    p_input: retryInput,
+                    p_max_output: retryOutput,
+                    p_spent: spent,
+                  },
+                );
+                if (reserveError)
+                  throw new Error(
+                    reserveError.message.includes("TOKEN_LIMIT")
+                      ? "SUMMARY_QUOTA"
+                      : "SUMMARY_RESERVATION",
+                  );
+                compact.started = true;
+                compact.reserve += retryInput + retryOutput;
+                let retryText = "",
+                  usedInput = retryInput,
+                  usedOutput = 0,
+                  reportedInput = false,
+                  reportedOutput = false;
+                try {
+                  const retrySignal = AbortSignal.any([
+                    controller.signal,
+                    AbortSignal.timeout(25000),
+                  ]);
+                  const retryResponse = await fetch(
+                    "https://nano-gpt.com/api/v1/chat/completions",
+                    {
+                      method: "POST",
+                      signal: retrySignal,
+                      headers: {
+                        Authorization: `Bearer ${key}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        model: input.model_id,
+                        messages: plan.messages,
+                        stream: true,
+                        stream_options: { include_usage: true },
+                        max_tokens: retryOutput,
+                        temperature: 0.2,
+                        ...(modelReasoning(input.model_id, "low")
+                          ? {
+                              reasoning_effort: modelReasoning(
+                                input.model_id,
+                                "low",
+                              ),
+                            }
+                          : {}),
+                      }),
+                    },
+                  );
+                  for await (const item of providerEvents(
+                    retryResponse,
+                    retrySignal,
+                  )) {
+                    if (item.text) {
+                      retryText += item.text;
+                      if (tokenBound(retryText) > 6000)
+                        throw new Error("SUMMARY_SIZE");
+                    }
+                    if (item.usage) {
+                      if (
+                        Number.isInteger(item.usage.prompt_tokens) &&
+                        item.usage.prompt_tokens! >= 0
+                      ) {
+                        usedInput = item.usage.prompt_tokens!;
+                        reportedInput = true;
+                      }
+                      if (
+                        Number.isInteger(item.usage.completion_tokens) &&
+                        item.usage.completion_tokens! >= 0
+                      ) {
+                        usedOutput = item.usage.completion_tokens!;
+                        reportedOutput = true;
+                      }
+                      if (Number.isFinite(item.usage.cost))
+                        compact.cost =
+                          (compact.cost ?? 0) + Math.max(0, item.usage.cost!);
+                    }
+                  }
+                  candidate = validateSummary(retryText);
+                } finally {
+                  compact.input += usedInput;
+                  compact.output += reportedOutput
+                    ? usedOutput
+                    : tokenBound(retryText);
+                  compact.inputReported &&= reportedInput;
+                  compact.outputReported &&= reportedOutput;
+                }
+              } catch (error) {
+                lastError = error;
+                if (controller.signal.aborted) throw error;
+              }
+            }
+            if (candidate) {
+              // Retry a failed database write without repeating inference.
+              let saved = false;
+              for (let attempt = 0; attempt < 2 && !saved; attempt++) {
+                const { error: saveError } = await admin.rpc(
+                  "save_conversation_summary",
+                  {
+                    p_event: event,
+                    p_previous_seq: summary?.through_seq ?? 0,
+                    p_through_seq: plan.throughSeq,
+                    p_content: candidate,
+                    p_source_count: plan.sourceCount,
+                  },
+                );
+                saved = !saveError;
+              }
+              if (saved)
+                send({
+                  type: "context",
+                  message: `Resumen acumulativo actualizado · ${plan.sourceCount} mensajes. Los originales se conservan.`,
+                });
+              else lastError = new Error("SUMMARY_SAVE");
+              if (!saved) {
+                const failure = summaryFailureNotice(lastError);
+                log("summary", failure.code, event);
+                send({ type: "context", ...failure });
+              }
+            } else {
+              const failure = summaryFailureNotice(lastError);
+              log("summary", failure.code, event);
+              send({ type: "context", ...failure });
+            }
+            if (!full.trim()) throw new Error("EMPTY_STREAM");
           }
         } catch (error) {
           const code = error instanceof Error ? error.message : "";
@@ -592,7 +662,7 @@ export async function handler(
           clearTimeout(timeout);
           req.signal.removeEventListener("abort", abort);
           if (!providerStarted) inputTokens = 0;
-          if (!outputReported) outputTokens = tokenBound(full);
+          if (!outputReported) outputTokens = tokenBound(rawOutput);
           const { error: persistError } = await admin.rpc("finish_generation", {
             p_event: event,
             p_content: full,

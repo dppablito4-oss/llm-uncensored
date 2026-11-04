@@ -33,10 +33,10 @@ describe("Resumen progresivo con límites", () => {
     const plan = planSummary(messages, messages, prior, 12000)!;
     const source = JSON.parse(plan.messages[1].content);
     expect(source.previous_summary).toBe(prior.content);
-    expect(source.older_messages).toHaveLength(8);
+    expect(source.older_messages).toHaveLength(12);
     expect(source.older_messages[0].content).toContain("turno 8");
-    expect(plan.throughSeq).toBe(16);
-    expect(plan.sourceCount).toBe(16);
+    expect(plan.throughSeq).toBe(20);
+    expect(plan.sourceCount).toBe(20);
     expect(
       summaryNeeded(messages, { ...prior, through_seq: 16 }, 12000, "system"),
     ).toBe(false);
@@ -117,4 +117,33 @@ describe("Validación y diagnóstico de resumen", () => {
       summaryFailureNotice(new Error("private secret")).message,
     ).not.toContain("private");
   });
+});
+
+it("consolida 80 mensajes en un solo resumen reemplazado por cada bloque de 16", () => {
+  const all = history(81, 30);
+  let summary: {
+    content: string;
+    through_seq: number;
+    source_count: number;
+  } | null = null;
+  for (let end = 17; end <= 81; end += 16) {
+    const recent = all.slice(0, end).slice(-60);
+    expect(summaryNeeded(recent, summary, 12000, "system")).toBe(true);
+    const plan = planSummary(
+      all.filter((m) => m.seq > (summary?.through_seq ?? 0)).slice(0, 60),
+      recent,
+      summary,
+      12000,
+    )!;
+    const data = JSON.parse(plan.messages[1].content);
+    expect(data.older_messages).toHaveLength(16);
+    expect(data.previous_summary).toBe(summary?.content ?? "");
+    summary = {
+      content: `Ficha acumulativa ${end - 1}`,
+      through_seq: plan.throughSeq,
+      source_count: plan.sourceCount,
+    };
+  }
+  expect(summary!.source_count).toBe(80);
+  expect(summary!.through_seq).toBe(80);
 });
