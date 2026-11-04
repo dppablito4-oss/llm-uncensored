@@ -344,13 +344,16 @@ export async function handler(
               context = buildContext(
                 combinedSystem,
                 preset?.system_prompt || "",
-                [],
+                rankMemories(
+                  (memories || []).map((m) => m.content),
+                  recent.at(-1)?.content || "",
+                ),
                 recent.filter((m) => m.seq > plan!.throughSeq),
                 Math.min(
                   contextBudget,
                   (model.context_length ?? 24000) - responseTokens,
                 ),
-                0,
+                memoryBudget,
               );
             } catch {
               // Keep the ordinary answer if a very long current message leaves

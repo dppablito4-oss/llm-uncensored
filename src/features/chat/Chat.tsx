@@ -251,13 +251,13 @@ export function Chat({ userId }: { userId: string }) {
           " Tu mensaje sigue en el editor. Revisa el historial antes de reenviarlo si hubo un corte de conexión.";
       setNotice(failureNotice);
     } finally {
-      const readingPosition = scroll.current?.scrollTop ?? 0;
       await Promise.all([
         client.invalidateQueries({ queryKey: ["messages", cid] }),
         client.invalidateQueries({ queryKey: ["conversations"] }),
         client.invalidateQueries({ queryKey: ["usage-summary"] }),
         client.invalidateQueries({ queryKey: ["conversation-summary", cid] }),
       ]);
+      const readingPosition = scroll.current?.scrollTop ?? 0;
       setPendingUser("");
       setDraft("");
       setStreamMessages(null);

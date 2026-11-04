@@ -229,6 +229,9 @@ describe("Edge handler con proveedor simulado y SDK Supabase real", () => {
       .mock.calls.filter(([url]) => String(url).includes("nano-gpt.com"));
     expect(calls).toHaveLength(1);
     expect(providerBody!.model).toBe("Gemma-4-31B-SDFT-Heretic-RP");
+    expect(JSON.stringify(providerBody)).toContain(
+      "User likes concise answers",
+    );
     expect(finish).toMatchObject({
       p_content: "**respuesta** visible",
       p_input: 10,
