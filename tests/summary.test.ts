@@ -129,7 +129,7 @@ it("consolida 80 mensajes en un solo resumen reemplazado por cada bloque de 16",
   for (let end = 17; end <= 81; end += 16) {
     const recent = all.slice(0, end).slice(-60);
     expect(summaryNeeded(recent, summary, 12000, "system")).toBe(true);
-    const plan = planSummary(
+    const plan: NonNullable<ReturnType<typeof planSummary>> = planSummary(
       all.filter((m) => m.seq > (summary?.through_seq ?? 0)).slice(0, 60),
       recent,
       summary,
