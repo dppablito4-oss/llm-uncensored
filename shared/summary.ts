@@ -113,7 +113,7 @@ export function planSummary(
       }),
     },
   ];
-  const allowance = Math.min(20000, Math.floor(budget * 0.68));
+  const allowance = Math.min(20000, Math.floor(budget * 0.8));
   let turns = selected.map((m) => ({ ...m }));
   for (
     let cap = 6000;

@@ -147,3 +147,15 @@ it("consolida 80 mensajes en un solo resumen reemplazado por cada bloque de 16",
   expect(summary!.source_count).toBe(80);
   expect(summary!.through_seq).toBe(80);
 });
+
+it("un resumen antiguo de 6000 bytes todavía permite compactar otro bloque", () => {
+  const all = history(33, 100);
+  const previous = {
+    content: "a".repeat(6000),
+    through_seq: 16,
+    source_count: 16,
+  };
+  const plan = planSummary(all.slice(16), all, previous, 12000);
+  expect(plan).not.toBeNull();
+  expect(plan!.sourceCount).toBe(32);
+});
